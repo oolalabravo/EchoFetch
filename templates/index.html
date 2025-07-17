@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Spotify Downloader 🎵</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <style>
+    @keyframes gradientBG {
+      0% {background-position: 0% 50%;}
+      50% {background-position: 100% 50%;}
+      100% {background-position: 0% 50%;}
+    }
+    body {
+      background: linear-gradient(-45deg, #1db954, #121212, #191414, #0f0f0f);
+      background-size: 400% 400%;
+      animation: gradientBG 15s ease infinite;
+      font-family: 'Roboto', sans-serif;
+      overflow-x: hidden;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1db954;
+      border-radius: 10px;
+    }
+    canvas#webgl-bg {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -2;
+    }
+  </style>
+</head>
+<body class="text-white min-h-screen flex flex-col">
+  <canvas id="webgl-bg"></canvas>
+  <div class="flex flex-1 overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="bg-black/50 backdrop-blur-lg p-6 w-60 shadow-md animate-fade-in-left">
+      <h1 class="text-3xl font-bold text-green-500 mb-8">Spotify</h1>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 p-10 overflow-y-auto animate-fade-in">
+      <div class="max-w-3xl mx-auto bg-white/5 p-8 rounded-2xl shadow-lg backdrop-blur-md hover:scale-[1.01] transition-all duration-300">
+        <h2 class="text-3xl font-bold mb-6 text-green-400">🎶 Download Your Favorite Song</h2>
+        <form id="downloadForm" class="space-y-4">
+          <input type="text" id="query" placeholder="Enter song name..." required
+            class="w-full p-4 rounded-full bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500" />
+          <button type="submit"
+            class="bg-green-500 hover:bg-green-600 transition-all px-6 py-3 rounded-full font-semibold hover:shadow-xl">
+            Search & Download
+          </button>
+        </form>
+
+        <div id="result" class="mt-8 space-y-4"></div>
+        <div id="log" class="mt-10 p-4 bg-black/40 border border-gray-700 rounded-lg overflow-y-auto max-h-52 text-sm font-mono"></div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const form = document.getElementById('downloadForm');
+    const resultDiv = document.getElementById('result');
+    const logDiv = document.getElementById('log');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const query = document.getElementById('query').value;
+      resultDiv.innerHTML = `<div class="text-yellow-400 animate-pulse">🔍 Searching for matches...</div>`;
+
+      const res = await fetch('/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `query=${encodeURIComponent(query)}`
+      });
+
+      const data = await res.json();
+
+      if (data.status === 'success') {
+        resultDiv.innerHTML = `<p class="font-semibold text-green-400 mb-2">🎵 Choose a song:</p>`;
+        data.choices.forEach((track) => {
+          const btn = document.createElement('button');
+          btn.textContent = track.name;
+          btn.className = "block w-full text-left px-4 py-2 mt-2 bg-gray-700 hover:bg-green-600 rounded-lg transition-all hover:scale-105";
+          btn.onclick = async () => {
+            resultDiv.innerHTML = `<div class="text-yellow-400 animate-pulse">⏳ Downloading \"${track.name}\"...</div>`;
+            const downloadRes = await fetch('/download', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: `url=${encodeURIComponent(track.url)}`
+            });
+            const downloadData = await downloadRes.json();
+
+            if (downloadData.status === 'success') {
+              resultDiv.innerHTML = `✅ Download ready: <a class="text-green-400 underline" href="${downloadData.download_url}" target="_blank">${downloadData.file}</a>`;
+            } else {
+              resultDiv.innerHTML = `<span class="text-red-400">❌ Error: ${downloadData.message}</span>`;
+            }
+
+            const logs = await fetch('/logs');
+            const logText = await logs.json();
+            logDiv.textContent = logText.join('\n');
+          };
+          resultDiv.appendChild(btn);
+        });
+      } else {
+        resultDiv.innerHTML = `<span class="text-red-400">❌ Error: ${data.message}</span>`;
+      }
+
+      const logs = await fetch('/logs');
+      const logText = await logs.json();
+      logDiv.textContent = logText.join('\n');
+    });
+
+    // Background Canvas Animation using WebGL
+    const canvas = document.getElementById('webgl-bg');
+    const ctx = canvas.getContext('2d');
+    let w, h;
+    function resizeCanvas() {
+      w = canvas.width = window.innerWidth;
+      h = canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    const dots = Array.from({ length: 120 }).map(() => ({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      r: Math.random() * 1.5 + 0.5,
+      vx: Math.random() * 0.5 - 0.25,
+      vy: Math.random() * 0.5 - 0.25
+    }));
+
+    function draw() {
+      ctx.clearRect(0, 0, w, h);
+      for (let i = 0; i < dots.length; i++) {
+        let d = dots[i];
+        d.x += d.vx;
+        d.y += d.vy;
+        if (d.x < 0 || d.x > w) d.vx *= -1;
+        if (d.y < 0 || d.y > h) d.vy *= -1;
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(30,215,96,0.7)';
+        ctx.fill();
+      }
+      requestAnimationFrame(draw);
+    }
+    draw();
+  </script>
+</body>
+</html>
