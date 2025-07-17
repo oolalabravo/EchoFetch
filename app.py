@@ -1,6 +1,9 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory, Response
 from spotipy.oauth2 import SpotifyClientCredentials
 import spotipy, subprocess, os, re, time
+import os
+os.environ["PATH"] += os.pathsep + os.path.abspath("ffmpeg")
+
 
 app = Flask(__name__)
 DOWNLOAD_FOLDER = os.path.join(os.getcwd(), r"downloads")
