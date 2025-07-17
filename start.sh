@@ -1,12 +1,7 @@
 #!/bin/bash
 
-# Add ffmpeg folder to PATH
-export PATH=$PWD/bin:$PATH
+# Step 1: Update and install FFmpeg
+apt update && apt install ffmpeg -y
 
-# Show version (just for confirmation)
-ffmpeg -version
-
-# Start the Python app
+# Step 2: Start your app
 python app.py
-
-
