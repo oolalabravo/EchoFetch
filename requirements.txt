@@ -1,3 +1,9 @@
+<<<<<<< HEAD
 flask
 spotipy
 spotdl
+=======
+flask
+spotipy
+spotdl
+>>>>>>> 3dd8458c7e1aecd85134643cad9b3447552c0354

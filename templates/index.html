@@ -37,27 +37,35 @@
 </head>
 <body class="text-white min-h-screen flex flex-col">
   <canvas id="webgl-bg"></canvas>
-  <div class="flex flex-1 overflow-hidden">
-    <!-- Sidebar -->
-    <aside class="bg-black/50 backdrop-blur-lg p-6 w-60 shadow-md animate-fade-in-left">
+
+  <div class="flex flex-1 flex-col md:flex-row overflow-hidden">
+    <aside class="bg-black/50 backdrop-blur-lg p-4 md:p-6 w-full md:w-60 shadow-md">
       <h1 class="text-3xl font-bold text-green-500 mb-8">Spotify</h1>
     </aside>
 
-    <!-- Main -->
-    <main class="flex-1 p-10 overflow-y-auto animate-fade-in">
-      <div class="max-w-3xl mx-auto bg-white/5 p-8 rounded-2xl shadow-lg backdrop-blur-md hover:scale-[1.01] transition-all duration-300">
-        <h2 class="text-3xl font-bold mb-6 text-green-400">🎶 Download Your Favorite Song</h2>
+    <main class="flex-1 p-4 md:p-10 overflow-y-auto">
+      <div class="w-full max-w-3xl mx-auto bg-white/5 p-6 md:p-8 rounded-2xl shadow-lg backdrop-blur-md hover:scale-[1.01] transition-all duration-300">
+        <h2 class="text-3xl font-bold mb-6 text-green-400">🎶 Download or Play Your Favorite Song</h2>
+
         <form id="downloadForm" class="space-y-4">
           <input type="text" id="query" placeholder="Enter song name..." required
             class="w-full p-4 rounded-full bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500" />
           <button type="submit"
-            class="bg-green-500 hover:bg-green-600 transition-all px-6 py-3 rounded-full font-semibold hover:shadow-xl">
-            Search & Download
+            class="w-full sm:w-auto bg-green-500 hover:bg-green-600 transition-all px-6 py-3 rounded-full font-semibold hover:shadow-xl">
+            Search
           </button>
         </form>
 
+        <div id="progressBarContainer" class="mt-6 hidden">
+          <div class="text-sm text-white mb-2">Download Progress</div>
+          <div class="w-full bg-gray-700 rounded-full h-4 overflow-hidden">
+            <div id="progressBar" class="bg-green-500 h-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <div id="progressStatus" class="text-sm text-gray-300 mt-2"></div>
+        </div>
+
         <div id="result" class="mt-8 space-y-4"></div>
-        <div id="log" class="mt-10 p-4 bg-black/40 border border-gray-700 rounded-lg overflow-y-auto max-h-52 text-sm font-mono"></div>
+        <div id="log" class="mt-10 p-4 bg-black/40 border border-gray-700 rounded-lg overflow-y-auto max-h-52 text-sm font-mono whitespace-pre-wrap"></div>
       </div>
     </main>
   </div>
@@ -66,6 +74,32 @@
     const form = document.getElementById('downloadForm');
     const resultDiv = document.getElementById('result');
     const logDiv = document.getElementById('log');
+    const progressBar = document.getElementById('progressBar');
+    const progressStatus = document.getElementById('progressStatus');
+    const progressBarContainer = document.getElementById('progressBarContainer');
+
+    // Server-Sent Events setup
+    const evtSource = new EventSource("/progress-stream");
+    evtSource.onmessage = function (event) {
+      const message = event.data;
+      logDiv.textContent += message + "\n";
+      logDiv.scrollTop = logDiv.scrollHeight;
+
+      if (message.includes("Starting")) {
+        progressBar.style.width = "0%";
+        progressStatus.textContent = "Starting...";
+      } else if (message.toLowerCase().includes("error")) {
+        progressStatus.textContent = "⚠️ Error occurred...";
+      } else if (message.toLowerCase().includes("complete") || message.toLowerCase().includes("file ready")) {
+        progressBar.style.width = "100%";
+        progressStatus.textContent = "✅ Download complete";
+      } else {
+        // Optional: estimate progress bar visually
+        const width = Math.min(progressBar.clientWidth + 5, progressBar.parentElement.clientWidth);
+        progressBar.style.width = `${width}px`;
+        progressStatus.textContent = message;
+      }
+    };
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -79,47 +113,94 @@
       });
 
       const data = await res.json();
+      resultDiv.innerHTML = '';
 
       if (data.status === 'success') {
         resultDiv.innerHTML = `<p class="font-semibold text-green-400 mb-2">🎵 Choose a song:</p>`;
+
         data.choices.forEach((track) => {
-          const btn = document.createElement('button');
-          btn.textContent = track.name;
-          btn.className = "block w-full text-left px-4 py-2 mt-2 bg-gray-700 hover:bg-green-600 rounded-lg transition-all hover:scale-105";
-          btn.onclick = async () => {
+          const container = document.createElement('div');
+          container.className = "bg-gray-800 p-4 rounded-lg shadow flex flex-col gap-2";
+
+          const name = document.createElement('p');
+          name.textContent = track.name;
+          name.className = "text-white font-semibold mb-2";
+
+          const downloadBtn = document.createElement('button');
+          downloadBtn.textContent = "⬇ Download";
+          downloadBtn.className = "bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg font-semibold transition-all";
+
+          const streamBtn = document.createElement('button');
+          streamBtn.textContent = "▶ Play";
+          streamBtn.className = "bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-lg font-semibold transition-all";
+
+          const audio = document.createElement('audio');
+          audio.controls = true;
+          audio.className = "mt-2 w-full hidden";
+
+          downloadBtn.onclick = async () => {
             resultDiv.innerHTML = `<div class="text-yellow-400 animate-pulse">⏳ Downloading \"${track.name}\"...</div>`;
+            progressBarContainer.classList.remove('hidden');
+            progressBar.style.width = '0%';
+            progressStatus.textContent = 'Starting...';
+            logDiv.textContent = '';
+
             const downloadRes = await fetch('/download', {
               method: 'POST',
               headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
               body: `url=${encodeURIComponent(track.url)}`
             });
-            const downloadData = await downloadRes.json();
 
+            const downloadData = await downloadRes.json();
             if (downloadData.status === 'success') {
               resultDiv.innerHTML = `✅ Download ready: <a class="text-green-400 underline" href="${downloadData.download_url}" target="_blank">${downloadData.file}</a>`;
             } else {
               resultDiv.innerHTML = `<span class="text-red-400">❌ Error: ${downloadData.message}</span>`;
+            }
+          };
+
+          streamBtn.onclick = async () => {
+            streamBtn.disabled = true;
+            streamBtn.textContent = "🎧 Loading...";
+
+            const streamRes = await fetch('/stream', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: `url=${encodeURIComponent(track.url)}`
+            });
+
+            const streamData = await streamRes.json();
+            if (streamData.status === 'success') {
+              audio.src = streamData.stream_url;
+              audio.classList.remove('hidden');
+              streamBtn.textContent = "▶ Play Again";
+              streamBtn.disabled = false;
+            } else {
+              resultDiv.innerHTML = `<span class="text-red-400">❌ Stream Error: ${streamData.message}</span>`;
+              streamBtn.textContent = "▶ Play";
+              streamBtn.disabled = false;
             }
 
             const logs = await fetch('/logs');
             const logText = await logs.json();
             logDiv.textContent = logText.join('\n');
           };
-          resultDiv.appendChild(btn);
+
+          container.appendChild(name);
+          container.appendChild(downloadBtn);
+          container.appendChild(streamBtn);
+          container.appendChild(audio);
+          resultDiv.appendChild(container);
         });
       } else {
         resultDiv.innerHTML = `<span class="text-red-400">❌ Error: ${data.message}</span>`;
       }
-
-      const logs = await fetch('/logs');
-      const logText = await logs.json();
-      logDiv.textContent = logText.join('\n');
     });
 
-    // Background Canvas Animation using WebGL
     const canvas = document.getElementById('webgl-bg');
     const ctx = canvas.getContext('2d');
     let w, h;
+
     function resizeCanvas() {
       w = canvas.width = window.innerWidth;
       h = canvas.height = window.innerHeight;
@@ -137,8 +218,7 @@
 
     function draw() {
       ctx.clearRect(0, 0, w, h);
-      for (let i = 0; i < dots.length; i++) {
-        let d = dots[i];
+      for (let d of dots) {
         d.x += d.vx;
         d.y += d.vy;
         if (d.x < 0 || d.x > w) d.vx *= -1;
