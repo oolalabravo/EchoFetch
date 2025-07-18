@@ -10,9 +10,17 @@ A **modern, enterprise-class Spotify downloader** web application built with **F
 
 ## 🌟 Live Preview
 
-[![Website echofetch-production.up.railway.app="center">
-  Modern, clean, and user-friendly interface — responsive on any device.
-  Try it live →
+<p align="center">
+  <a href="https://echofetch-production.up.railway.app/" target="_blank">
+    <img src="preview.PNG" alt="Website Preview" style="border-radius:16px; max-width:90%;">
+  </a>
+</p>
+
+<p align="center">
+  <b>Modern, clean, and user-friendly interface — responsive on any device.</b><br>
+  <a href="https://echofetch-production.up.railway.app/" target="_blank">🚀 Try it live &rarr;</a>
+</p>
+
 
 
 _Hosted on Railway_
