@@ -38,10 +38,12 @@ def find_best_match_mp3(artist, title, directory):
     return best_match
 
 # Initialize Spotify API
+# Replace hardcoded credentials with environment variables
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
-    client_id='78ea7eb921f847bd8c74c4320782f3ab',
-    client_secret='e3a16c4eeca6445a8526ea32caef4c35'
+    client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
+    client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET")
 ))
+
 
 @app.route('/')
 def index():
