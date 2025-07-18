@@ -56,3 +56,4 @@ spotdl
 gunicorn
 yt-dlp
 ffmpeg-python
+dotenvdotenv
