@@ -2,74 +2,93 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Spotify Downloader 🎵</title>
+  <title>Spotify Downloader | EchoFetch by Bhvaya Sharma</title>
+  <meta name="description" content="Enterprise-grade Spotify song downloader. Secure, elegant, and lightning-fast. Backed by open source.">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/spotify.svg" type="image/svg+xml">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <style>
-    @keyframes gradientBG {
-      0% {background-position: 0% 50%;}
-      50% {background-position: 100% 50%;}
-      100% {background-position: 0% 50%;}
-    }
     body {
-      background: linear-gradient(-45deg, #1db954, #121212, #191414, #0f0f0f);
-      background-size: 400% 400%;
-      animation: gradientBG 15s ease infinite;
-      font-family: 'Roboto', sans-serif;
-      overflow-x: hidden;
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(120deg, #111 60%, #212225 100%);
+      background-size: 180% 180%;
+      animation: bgmove 15s ease-in-out infinite;
     }
-    ::-webkit-scrollbar {
-      width: 6px;
+    @keyframes bgmove {
+      0% { background-position: 0% 50%;}
+      50% { background-position: 100% 50%;}
+      100% { background-position: 0% 50%;}
     }
-    ::-webkit-scrollbar-thumb {
-      background: #1db954;
-      border-radius: 10px;
-    }
-    canvas#webgl-bg {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: -2;
-    }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-thumb { background: #1db954; border-radius: 10px;}
   </style>
 </head>
-<body class="text-white min-h-screen flex flex-col">
-  <canvas id="webgl-bg"></canvas>
+<body class="min-h-screen flex flex-col items-center justify-center px-2 py-1 text-white">
 
-  <div class="flex flex-1 flex-col md:flex-row overflow-hidden">
-    <aside class="bg-black/50 backdrop-blur-lg p-4 md:p-6 w-full md:w-60 shadow-md">
-      <h1 class="text-3xl font-bold text-green-500 mb-8">Spotify</h1>
-    </aside>
-
-    <main class="flex-1 p-4 md:p-10 overflow-y-auto">
-      <div class="w-full max-w-3xl mx-auto bg-white/5 p-6 md:p-8 rounded-2xl shadow-lg backdrop-blur-md hover:scale-[1.01] transition-all duration-300">
-        <h2 class="text-3xl font-bold mb-6 text-green-400">🎶 Download or Play Your Favorite Song</h2>
-
-        <form id="downloadForm" class="space-y-4">
-          <input type="text" id="query" placeholder="Enter song name..." required
-            class="w-full p-4 rounded-full bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500" />
-          <button type="submit"
-            class="w-full sm:w-auto bg-green-500 hover:bg-green-600 transition-all px-6 py-3 rounded-full font-semibold hover:shadow-xl">
-            Search
-          </button>
-        </form>
-
-        <div id="progressBarContainer" class="mt-6 hidden">
-          <div class="text-sm text-white mb-2">Download Progress</div>
-          <div class="w-full bg-gray-700 rounded-full h-4 overflow-hidden">
-            <div id="progressBar" class="bg-green-500 h-full transition-all duration-300" style="width: 0%"></div>
-          </div>
-          <div id="progressStatus" class="text-sm text-gray-300 mt-2"></div>
-        </div>
-
-        <div id="result" class="mt-8 space-y-4"></div>
-        <div id="log" class="mt-10 p-4 bg-black/40 border border-gray-700 rounded-lg overflow-y-auto max-h-52 text-sm font-mono whitespace-pre-wrap"></div>
-      </div>
-    </main>
+  <!-- Banner with action button for GitHub repo -->
+  <div class="w-full py-2 px-4 flex flex-row items-center justify-between bg-gradient-to-r from-emerald-400/80 via-green-600/60 to-emerald-950/70 text-black text-sm md:text-base shadow backdrop-blur z-30">
+    <span class="font-semibold tracking-tight flex items-center gap-2">
+      <svg width="22" height="22" viewBox="0 0 512 512" fill="none" class="inline align-middle mr-1"><circle cx="256" cy="256" r="256" fill="#24292E"></circle><path fill="#fff" d="M256 120c-65.344 0-118.4 53.056-118.4 118.4 0 52.256 33.984 96.544 81.056 112.304 5.92 1.088 8.08-2.576 8.08-5.728 0-2.832-.096-10.352-.144-20.304-32.976 7.168-39.944-15.904-39.944-15.904-5.392-13.704-13.16-17.36-13.16-17.36-10.752-7.36.816-7.216.816-7.216 11.888.832 18.144 12.176 18.144 12.176 10.56 18.112 27.712 12.88 34.48 9.872 1.072-7.648 4.144-12.88 7.544-15.848-26.352-3-54.048-13.176-54.048-58.616 0-12.944 4.624-23.536 12.192-31.824-1.216-3-5.28-15.12 1.136-31.52 0 0 9.936-3.184 32.56 12.16 9.456-2.624 19.6-3.952 29.68-4 10.08.048 20.224 1.376 29.688 4 22.608-15.344 32.528-12.16 32.528-12.16 6.416 16.4 2.352 28.52 1.136 31.52 7.584 8.288 12.176 18.88 12.176 31.824 0 45.6-27.792 55.584-54.232 58.52 4.256 3.672 8.064 10.92 8.064 22.016 0 15.904-.144 28.736-.144 32.64 0 3.184 2.128 6.848 8.112 5.696C340.432 334.944 374.4 290.656 374.4 238.4 374.4 173.056 321.344 120 256 120z"/></svg>
+      Open-source & auditable on  
+    </span>
+    <a href="https://github.com/oolalabravo/EchoFetch" target="_blank" rel="noopener"
+      class="inline-flex items-center bg-black text-white rounded-full px-4 py-1 font-bold hover:bg-green-500/80 focus:ring focus:outline-none gap-2 duration-200 shadow active:scale-95">
+      <svg width="18" height="18" fill="#fff" class="mr-1 mb-0.5" viewBox="0 0 16 16"><path d="M8 .198a8 8 0 0 0-2.531 15.59c.4.073.547-.173.547-.384 0-.19-.007-.693-.01-1.36-3.338.726-4.042-1.61-4.042-1.61-.364-.924-.89-1.171-.89-1.171-.726-.497.055-.487.055-.487.803.056 1.226.825 1.226.825.714 1.223 1.872.87 2.328.666.073-.517.279-.87.507-1.07-2.665-.303-5.466-1.334-5.466-5.932 0-1.311.469-2.382 1.236-3.222-.124-.303-.536-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.51 11.51 0 0 1 8 4.924c1.02.005 2.048.137 3.008.403 2.29-1.553 3.297-1.23 3.297-1.23.655 1.653.244 2.874.12 3.176.77.84 1.234 1.911 1.234 3.222 0 4.61-2.805 5.625-5.478 5.921.286.248.542.738.542 1.488 0 1.075-.01 1.943-.01 2.206 0 .213.145.46.552.382A8.001 8.001 0 0 0 8 .198"/></svg>
+      GitHub/EchoFetch
+    </a>
   </div>
 
+  <main id="mainCard" class="w-full max-w-3xl mx-auto z-10 mt-8">
+    <section class="bg-white/10 backdrop-blur-lg border border-slate-50/10 rounded-2xl px-10 py-12 shadow-2xl transition-all duration-300 hover:shadow-green-800/40 relative overflow-hidden">
+      <header class="flex flex-col md:flex-row items-start md:items-center mb-8 gap-4">
+        <svg class="w-12 h-12 text-green-400 drop-shadow mr-2 -ml-1" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="24" fill="#1DB954"/><path d="M34 24c-3.96-2.4-10.44-2.64-13.84-1.36m10.16-5.6c-3.44-2.08-8.64-2.12-11.6-1.32m-2.56 16.2c2.64-1.56 8.68-1.68 13.04 0m-9.68-6.36c2.76-1.08 7.84-1 11.12 0" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+        <div>
+          <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight text-green-400 pb-1">Spotify Downloader</h1>
+          <div class="text-gray-200/70 text-lg font-semibold leading-normal">A secure, enterprise-grade Spotify song downloader—download or play tracks instantly, anytime.</div>
+          <span class="inline-block mt-2 text-xs bg-green-400/20 text-green-300 font-semibold rounded px-2 py-0.5">Enterprise reliability. Open-source transparency.</span>
+        </div>
+      </header>
+
+      <form id="downloadForm" class="flex flex-col gap-4 mt-1">
+        <label for="query" class="text-base text-white/90 font-bold mb-1">Song name or artist:</label>
+        <div class="flex gap-3 flex-col sm:flex-row">
+          <input
+            type="text"
+            id="query"
+            placeholder="e.g. Beyoncé Halo"
+            required
+            class="flex-1 p-4 border-2 border-slate-50/10 rounded-xl bg-slate-800/60 backdrop-blur-md text-white placeholder-white/70 font-medium focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition"
+            autocomplete="off"/>
+          <button
+            type="submit"
+            class="bg-green-500 hover:bg-green-600 px-8 py-4 rounded-full font-bold text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-green-300 active:scale-98 transition-all duration-150"
+          >Search</button>
+        </div>
+      </form>
+
+      <div id="result" class="mt-10 space-y-7"></div>
+
+      <div id="progressBarContainer" class="mt-8 hidden">
+        <div class="text-xs text-white mb-2 pl-1">Download Progress</div>
+        <div class="w-full bg-gray-700/80 rounded-full h-4 overflow-hidden">
+          <div id="progressBar" class="bg-green-500 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <div id="progressStatus" class="text-xs text-gray-300 mt-2 ml-1"></div>
+      </div>
+
+      <div id="log" class="mt-10 bg-slate-900/60 border border-gray-700/60 rounded-lg overflow-y-auto max-h-52 text-xs font-mono p-4 transition-all duration-200 min-h-[54px]"></div>
+
+      <footer class="pt-10 pb-2 flex flex-col md:flex-row md:justify-between text-xs text-gray-400/80 gap-2 mt-8 border-t border-slate-200/10">
+        <span>Made by <span class="font-bold text-green-300">Bhvaya Sharma</span> with Spotify API & SpotDL</span>
+        <span>Open-source on <a class="underline hover:text-green-200" href="https://github.com/oolalabravo/EchoFetch" target="_blank">GitHub/EchoFetch</a></span>
+        <span class="hidden md:inline">🚀 Secure, rapid, and private — ready for enterprise</span>
+      </footer>
+    </section>
+  </main>
+
+  <!-- GSAP Animations & JS logic -->
   <script>
     const form = document.getElementById('downloadForm');
     const resultDiv = document.getElementById('result');
@@ -78,159 +97,185 @@
     const progressStatus = document.getElementById('progressStatus');
     const progressBarContainer = document.getElementById('progressBarContainer');
 
-    // Server-Sent Events setup
+    // Animations on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      gsap.from("#mainCard", { y: 50, opacity: 0, duration: 1, ease: "power3.out" });
+      gsap.from("#downloadForm > *", { stagger: 0.08, y: 25, opacity: 0, delay: 0.15, duration: 0.7 });
+    });
+
+    // Server-Sent Events for live logs
     const evtSource = new EventSource("/progress-stream");
     evtSource.onmessage = function (event) {
       const message = event.data;
-      logDiv.textContent += message + "\n";
+      const logLine = document.createElement("div");
+      logLine.textContent = message;
+      logDiv.appendChild(logLine);
       logDiv.scrollTop = logDiv.scrollHeight;
+      gsap.fromTo(logLine, { backgroundColor: "#6ee79433" }, { backgroundColor: "transparent", duration: 1 });
 
+      // Progress animation
       if (message.includes("Starting")) {
-        progressBar.style.width = "0%";
+        animateProgressBar(8);
         progressStatus.textContent = "Starting...";
       } else if (message.toLowerCase().includes("error")) {
         progressStatus.textContent = "⚠️ Error occurred...";
+        animateProgressBar(100);
       } else if (message.toLowerCase().includes("complete") || message.toLowerCase().includes("file ready")) {
-        progressBar.style.width = "100%";
+        animateProgressBar(100);
         progressStatus.textContent = "✅ Download complete";
       } else {
-        // Optional: estimate progress bar visually
-        const width = Math.min(progressBar.clientWidth + 5, progressBar.parentElement.clientWidth);
-        progressBar.style.width = `${width}px`;
+        let curr = parseFloat(progressBar.style.width || "0");
+        let next = Math.min(curr + 14, 93);
+        animateProgressBar(next);
         progressStatus.textContent = message;
       }
     };
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const query = document.getElementById('query').value;
-      resultDiv.innerHTML = `<div class="text-yellow-400 animate-pulse">🔍 Searching for matches...</div>`;
+    function animateProgressBar(target) {
+      gsap.to("#progressBar", {
+        width: `${target}%`,
+        duration: 0.5,
+        ease: "power1.inOut"
+      });
+      if (target < 100) progressBar.classList.add("animate-pulse");
+      else progressBar.classList.remove("animate-pulse");
+    }
 
-      const res = await fetch('/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `query=${encodeURIComponent(query)}`
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const query = document.getElementById("query").value.trim();
+      if (!query) return;
+      resultDiv.innerHTML = `<div class="text-green-200 animate-pulse font-medium">🔎 Searching for tracks...</div>`;
+      const res = await fetch("/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `query=${encodeURIComponent(query)}`,
       });
 
       const data = await res.json();
-      resultDiv.innerHTML = '';
+      resultDiv.innerHTML = "";
 
-      if (data.status === 'success') {
-        resultDiv.innerHTML = `<p class="font-semibold text-green-400 mb-2">🎵 Choose a song:</p>`;
+      if (data.status === "success") {
+        resultDiv.innerHTML = `<div class="font-bold text-green-300 mb-2">🎵 Choose a track:</div>`;
+        data.choices.forEach((track, idx) => {
+          const container = document.createElement("section");
+          container.className =
+            "result-card bg-slate-800/85 rounded-xl shadow-md flex flex-col sm:flex-row gap-3 items-start justify-between p-4 sm:p-6 mt-2 hover:ring-2 hover:ring-green-400 transition-all ring-1 ring-slate-700/30";
+          container.style.opacity = 0;
 
-        data.choices.forEach((track) => {
-          const container = document.createElement('div');
-          container.className = "bg-gray-800 p-4 rounded-lg shadow flex flex-col gap-2";
-
-          const name = document.createElement('p');
+          const infoDiv = document.createElement("div");
+          infoDiv.className = "flex-1 mb-2 sm:mb-0";
+          const name = document.createElement("p");
           name.textContent = track.name;
-          name.className = "text-white font-semibold mb-2";
+          name.className = "text-white font-semibold text-lg leading-tight mb-1";
+          const link = document.createElement("a");
+          link.href = track.url;
+          link.target = "_blank";
+          link.className =
+            "text-green-400 text-xs underline underline-offset-2 hover:text-green-200 transition";
+          link.textContent = "Open in Spotify";
+          infoDiv.appendChild(name);
+          infoDiv.appendChild(link);
 
-          const downloadBtn = document.createElement('button');
+          const btnGroup = document.createElement("div");
+          btnGroup.className = "flex gap-3 mt-2 sm:mt-0";
+          const downloadBtn = document.createElement("button");
           downloadBtn.textContent = "⬇ Download";
-          downloadBtn.className = "bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg font-semibold transition-all";
-
-          const streamBtn = document.createElement('button');
+          downloadBtn.className =
+            "bg-green-500 hover:bg-green-600 px-5 py-2.5 rounded-full font-semibold shadow-lg text-white focus:outline-none focus:ring-2 focus:ring-green-300 active:scale-98 transition-transform";
+          const streamBtn = document.createElement("button");
           streamBtn.textContent = "▶ Play";
-          streamBtn.className = "bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-lg font-semibold transition-all";
+          streamBtn.className =
+            "bg-blue-600 hover:bg-blue-700 px-5 py-2.5 rounded-full font-semibold shadow-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-300 active:scale-98 transition-transform";
 
-          const audio = document.createElement('audio');
+          btnGroup.appendChild(downloadBtn);
+          btnGroup.appendChild(streamBtn);
+
+          const audio = document.createElement("audio");
           audio.controls = true;
-          audio.className = "mt-2 w-full hidden";
+          audio.className = "mt-3 w-full hidden";
 
           downloadBtn.onclick = async () => {
-            resultDiv.innerHTML = `<div class="text-yellow-400 animate-pulse">⏳ Downloading \"${track.name}\"...</div>`;
-            progressBarContainer.classList.remove('hidden');
-            progressBar.style.width = '0%';
-            progressStatus.textContent = 'Starting...';
-            logDiv.textContent = '';
+            resultDiv.innerHTML = `<div class="animate-pulse text-yellow-400 font-semibold flex items-center gap-2">
+                <svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="#FACF2A" stroke-width="4"></circle></svg>
+                Downloading <span class="font-bold">${track.name}</span> ...
+            </div>`;
+            progressBarContainer.classList.remove("hidden");
+            animateProgressBar(0);
+            progressStatus.textContent = "Starting...";
+            logDiv.innerHTML = "";
 
-            const downloadRes = await fetch('/download', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `url=${encodeURIComponent(track.url)}`
+            const downloadRes = await fetch("/download", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: `url=${encodeURIComponent(track.url)}`,
             });
 
             const downloadData = await downloadRes.json();
-            if (downloadData.status === 'success') {
-              resultDiv.innerHTML = `✅ Download ready: <a class="text-green-400 underline" href="${downloadData.download_url}" target="_blank">${downloadData.file}</a>`;
+            if (downloadData.status === "success") {
+              resultDiv.innerHTML = `<span class="text-green-300 font-semibold flex items-center gap-2">✅ Download ready: <a class="underline hover:text-green-400 transition" href="${downloadData.download_url}" target="_blank">${downloadData.file}</a></span>`;
             } else {
-              resultDiv.innerHTML = `<span class="text-red-400">❌ Error: ${downloadData.message}</span>`;
+              resultDiv.innerHTML = `<span class="text-red-400 font-bold">❌ Error: ${downloadData.message}</span>`;
             }
           };
 
           streamBtn.onclick = async () => {
             streamBtn.disabled = true;
+            gsap.to(streamBtn, { scale: 0.94, yoyo: true, repeat: 1, duration: 0.10 });
             streamBtn.textContent = "🎧 Loading...";
-
-            const streamRes = await fetch('/stream', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `url=${encodeURIComponent(track.url)}`
+            const streamRes = await fetch("/stream", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: `url=${encodeURIComponent(track.url)}`,
             });
 
             const streamData = await streamRes.json();
-            if (streamData.status === 'success') {
+            if (streamData.status === "success") {
               audio.src = streamData.stream_url;
-              audio.classList.remove('hidden');
+              audio.classList.remove("hidden");
               streamBtn.textContent = "▶ Play Again";
               streamBtn.disabled = false;
+              gsap.fromTo(audio, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.66, ease: "power2.out" });
             } else {
-              resultDiv.innerHTML = `<span class="text-red-400">❌ Stream Error: ${streamData.message}</span>`;
+              resultDiv.innerHTML = `<span class="text-red-400 font-bold">❌ Stream Error: ${streamData.message}</span>`;
               streamBtn.textContent = "▶ Play";
               streamBtn.disabled = false;
             }
-
-            const logs = await fetch('/logs');
+            const logs = await fetch("/logs");
             const logText = await logs.json();
-            logDiv.textContent = logText.join('\n');
+            logDiv.innerHTML = "";
+            logText.forEach(line => {
+              const d = document.createElement("div");
+              d.textContent = line;
+              logDiv.appendChild(d);
+              gsap.fromTo(d, { backgroundColor: "#6ee79419" }, { backgroundColor: "transparent", duration: 0.6 });
+            });
           };
 
-          container.appendChild(name);
-          container.appendChild(downloadBtn);
-          container.appendChild(streamBtn);
+          container.appendChild(infoDiv);
+          container.appendChild(btnGroup);
           container.appendChild(audio);
           resultDiv.appendChild(container);
         });
+
+        setTimeout(() => {
+          gsap.to(".result-card", {
+            opacity: 1,
+            y: 0,
+            stagger: 0.14,
+            duration: 0.54,
+            ease: "power2.out",
+            onStart: function() {
+              document.querySelectorAll(".result-card").forEach(
+                card=>{card.style.transform="translateY(32px)"}
+              );
+            }
+          });
+        }, 60);
       } else {
-        resultDiv.innerHTML = `<span class="text-red-400">❌ Error: ${data.message}</span>`;
+        resultDiv.innerHTML = `<span class="text-red-400 font-bold">❌ Error: ${data.message}</span>`;
       }
     });
-
-    const canvas = document.getElementById('webgl-bg');
-    const ctx = canvas.getContext('2d');
-    let w, h;
-
-    function resizeCanvas() {
-      w = canvas.width = window.innerWidth;
-      h = canvas.height = window.innerHeight;
-    }
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-
-    const dots = Array.from({ length: 120 }).map(() => ({
-      x: Math.random() * w,
-      y: Math.random() * h,
-      r: Math.random() * 1.5 + 0.5,
-      vx: Math.random() * 0.5 - 0.25,
-      vy: Math.random() * 0.5 - 0.25
-    }));
-
-    function draw() {
-      ctx.clearRect(0, 0, w, h);
-      for (let d of dots) {
-        d.x += d.vx;
-        d.y += d.vy;
-        if (d.x < 0 || d.x > w) d.vx *= -1;
-        if (d.y < 0 || d.y > h) d.vy *= -1;
-        ctx.beginPath();
-        ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(30,215,96,0.7)';
-        ctx.fill();
-      }
-      requestAnimationFrame(draw);
-    }
-    draw();
   </script>
 </body>
 </html>
