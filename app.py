@@ -8,20 +8,16 @@ from flask import (
 )
 from spotipy.oauth2 import SpotifyClientCredentials
 import spotipy
-from dotenv import load_dotenv
 
-# --- Load environment variables (for secret management, use .env in production) ---
-load_dotenv()
-
-# --- App Configuration & Initialization ---
+# --- App Configuration ---
 app = Flask(__name__)
 
 DOWNLOAD_FOLDER = os.path.join(os.getcwd(), "downloads")
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 LOGS = []
-LOG_LINES_LIMIT = 200  # Extended to keep more history for progress streaming
+LOG_LINES_LIMIT = 200
 
-# Append 'ffmpeg' to PATH for spotdl and media backend tools
+# Add ffmpeg to PATH if needed
 os.environ["PATH"] += os.pathsep + os.path.abspath("ffmpeg")
 
 # --- Logging Setup ---
@@ -38,18 +34,12 @@ def log(msg):
 # --- Helpers ---
 
 def sanitize_filename(name):
-    """Sanitize names for safe filesystem storage."""
     return re.sub(r'[\\/:"*?<>|]+', '-', name)
 
 def build_expected_filename(artist, title):
-    """Generate a clean mp3 filename for given artist/title."""
     return sanitize_filename(f"{artist} - {title}.mp3")
 
 def find_best_match_mp3(artist, title, directory):
-    """
-    Find the best matching MP3 file in directory for artist/title,
-    in case spotdl saves files with slightly different names.
-    """
     target = re.sub(r'\W+', '', f"{artist}{title}".lower())
     best_match, highest_score = None, 0
     for f in os.listdir(directory):
@@ -67,14 +57,12 @@ sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
 ))
 
 # --- Error Handling ---
-
 @app.errorhandler(Exception)
 def handle_exception(e):
     log(f"🔥 [SERVER ERROR]: {str(e)}")
     return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # --- Routes ---
-
 @app.route('/')
 def index():
     """Render the main frontend (index.html)."""
@@ -82,27 +70,19 @@ def index():
 
 @app.route('/logs')
 def logs():
-    """Fetch current logs for frontend streaming."""
     return jsonify(LOGS)
 
 @app.route('/search', methods=['POST'])
 def search():
-    """
-    Search Spotify tracks.
-    Input: 'query' (POST form)
-    Output: { status, choices: [{name, url}] }
-    """
     query = request.form.get('query')
     if not query:
         return jsonify({'status': 'error', 'message': 'No query provided'}), 400
-
     log(f"🔎 Searching for: {query}")
     try:
         results = sp.search(q=query, limit=3, type='track')
         items = results['tracks']['items']
         if not items:
             return jsonify({'status': 'error', 'message': 'No results found.'})
-
         choices = [{
             'name': f"{track['artists'][0]['name']} - {track['name']}",
             'url': track['external_urls']['spotify']
@@ -114,35 +94,26 @@ def search():
 
 @app.route('/download', methods=['POST'])
 def download():
-    """
-    Download a Spotify track to MP3 using spotdl.
-    Input: 'url' (POST form)
-    Output: { status, file, download_url }
-    """
     url = request.form.get('url')
     if not url:
         return jsonify({'status': 'error', 'message': 'No track URL provided'}), 400
-
     log(f"🎧 Downloading track: {url}")
     try:
         track_id = url.split("/")[-1].split("?")[0]
         track = sp.track(track_id)
         artist, title = track['artists'][0]['name'], track['name']
-
         cmd = [
             "spotdl",
             url,
             "--output", os.path.join(DOWNLOAD_FOLDER, "{artist} - {title}.{output-ext}")
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
-
         for line in (result.stdout or '').strip().split('\n'):
             if line:
                 log(f"📦 spotdl: {line}")
         for line in (result.stderr or '').strip().split('\n'):
             if line:
                 log(f"📦 spotdl ERR: {line}")
-
         matched_file = find_best_match_mp3(artist, title, DOWNLOAD_FOLDER)
         if matched_file:
             log(f"✅ File ready: {matched_file}")
@@ -160,7 +131,6 @@ def download():
 
 @app.route('/download-file/<path:filename>')
 def download_file(filename):
-    """Serve MP3 file to client for download."""
     try:
         return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=True)
     except Exception as e:
@@ -169,35 +139,26 @@ def download_file(filename):
 
 @app.route('/stream', methods=['POST'])
 def stream():
-    """
-    Download and prepare a Spotify track for streaming as MP3.
-    Input: 'url' (POST form)
-    Output: { status, stream_url }
-    """
     url = request.form.get('url')
     if not url:
         return jsonify({'status': 'error', 'message': 'No track URL provided'}), 400
-
     log(f"📡 Streaming request for: {url}")
     try:
         track_id = url.split("/")[-1].split("?")[0]
         track = sp.track(track_id)
         artist, title = track['artists'][0]['name'], track['name']
-
         cmd = [
             "spotdl",
             url,
             "--output", os.path.join(DOWNLOAD_FOLDER, "{artist} - {title}.{output-ext}")
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
-
         for line in (result.stdout or '').strip().split('\n'):
             if line:
                 log(f"📦 spotdl: {line}")
         for line in (result.stderr or '').strip().split('\n'):
             if line:
                 log(f"📦 spotdl ERR: {line}")
-
         matched_file = find_best_match_mp3(artist, title, DOWNLOAD_FOLDER)
         if matched_file:
             log(f"🎶 Stream ready: {matched_file}")
@@ -210,7 +171,6 @@ def stream():
 
 @app.route('/stream-file/<path:filename>')
 def stream_file(filename):
-    """Return MP3 music as stream."""
     try:
         return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=False, mimetype='audio/mpeg')
     except Exception as e:
@@ -219,9 +179,6 @@ def stream_file(filename):
 
 @app.route('/progress-stream')
 def progress_stream():
-    """
-    Pushes latest log line to client as server-sent events (SSE) for progress.
-    """
     def event_stream():
         previous_logs = ""
         while True:
