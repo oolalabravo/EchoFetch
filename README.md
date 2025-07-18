@@ -111,13 +111,3 @@ This project is licensed under the [MIT License](./LICENSE).
 
 > Made with ❤️ by \[Bhvaya sharma]
 
-```
-
----
-
-Let me know if you want:
-- A `LICENSE` file (I’ll generate it for MIT).
-- Markdown badges (build, license, etc.).
-- Auto-deploy GitHub Actions workflow file.
-- Custom preview image setup.
-```
