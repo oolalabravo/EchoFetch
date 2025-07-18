@@ -12,7 +12,7 @@ A **modern, enterprise-class Spotify downloader** web application built with **F
 
 ![Live Preview](https://s.wordpress.com/mshots/v1/https%3A%2F%2Fechofetch-production.up.railway.app?w=800)
 
-_Hosted on Railway_
+_Hosted on Railway_ https://echofetch-production.up.railway.app/
 
 ## 🚀 Features
 
