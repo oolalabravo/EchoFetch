@@ -12,7 +12,7 @@ A modern, responsive, and animated Spotify downloader web application built usin
 
 ## 📸 Preview
 
-[![Website Preview](./preview.png)](https://echofetch-production.up.railway.app/)
+[![Website Preview](preview.PNG)](https://echofetch-production.up.railway.app/)
 *Simple, clean, and elegant interface*
 Hosted on Railway 
 ---
