@@ -1,6 +1,4 @@
----
 
-````markdown
 # 🎵 Spotify Downloader
 
 A modern, responsive, and animated Spotify downloader web application built using **Flask**, **Spotipy**, **Tailwind CSS**, and **GSAP**. It allows users to search for and download songs from Spotify using the track URL or ID.  
