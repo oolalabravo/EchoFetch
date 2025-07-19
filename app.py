@@ -122,12 +122,42 @@ def download():
     if not yt_url:
         return jsonify({'status': 'error', 'message': 'Could not find YouTube URL.'})
 
-    mp3_data = download_mp3_to_memory(yt_url)
-    if mp3_data:
-        filename = sanitize_filename(yt_url.split("=")[-1]) + ".mp3"
-        return send_file(mp3_data, mimetype="audio/mpeg", as_attachment=True, download_name=filename)
-    else:
-        return jsonify({'status': 'error', 'message': 'MP3 not available'}), 500
+    try:
+        log(f"🎧 Downloading: {yt_url}")
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'cookiefile': 'cookies.txt',
+            'outtmpl': 'static/%(title)s.%(ext)s',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': True,
+            'noplaylist': True,
+            'logtostderr': False,
+            'progress_hooks': [lambda d: log(f"📦 {d['status']}: {d.get('filename', '')}")],
+        }
+
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(yt_url, download=True)
+            filename = sanitize_filename(info['title']) + ".mp3"
+            file_path = f"static/{filename}"
+
+            if os.path.exists(file_path):
+                # ✅ Return file URL to frontend
+                return jsonify({
+                    'status': 'success',
+                    'file_url': f"/static/{filename}",
+                    'title': info['title']
+                })
+            else:
+                log("❌ File was not found after supposed download.")
+                return jsonify({'status': 'error', 'message': 'File not found after download'}), 500
+    except Exception as e:
+        log(f"❌ Error during download: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 @app.route('/stream', methods=['POST'])
 def stream():
