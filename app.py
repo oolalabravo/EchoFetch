@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify, Response, send_file, send_from_directory
 from spotipy.oauth2 import SpotifyClientCredentials
-import spotipy, os, re, time
+import spotipy, os, re, time, random
 from io import BytesIO
 from yt_dlp import YoutubeDL
 
@@ -26,6 +26,14 @@ sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET")
 ))
 
+YDL_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+}
+
 def get_youtube_url_from_spotify(url):
     try:
         track_id = url.split("/")[-1].split("?")[0]
@@ -38,10 +46,12 @@ def get_youtube_url_from_spotify(url):
             'quiet': True,
             'format': 'bestaudio/best',
             'noplaylist': True,
-            'cookiefile': 'cookies.txt',
+            'http_headers': YDL_HEADERS
         }
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(f"ytsearch1:{query}", download=False)
+            # Optional: Short random delay to mimic human
+            time.sleep(random.uniform(1.0, 2.0))
             return info['entries'][0]['webpage_url']
     except Exception as e:
         log(f"❌ YouTube search failed: {str(e)}")
@@ -53,7 +63,6 @@ def download_mp3_to_memory(yt_url):
         buffer = BytesIO()
         ydl_opts = {
             'format': 'bestaudio/best',
-            'cookiefile': 'cookies.txt',
             'outtmpl': '%(title)s.%(ext)s',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -64,12 +73,15 @@ def download_mp3_to_memory(yt_url):
             'noplaylist': True,
             'logtostderr': False,
             'progress_hooks': [lambda d: log(f"📦 {d['status']}: {d.get('filename', '')}")],
+            'http_headers': YDL_HEADERS
         }
 
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(yt_url, download=False)
             ydl.download([yt_url])
             mp3_filename = f"{info['title']}.mp3"
+            # Optional: Short random delay after download
+            time.sleep(random.uniform(1.0, 2.0))
             if os.path.exists(mp3_filename):
                 with open(mp3_filename, 'rb') as f:
                     buffer.write(f.read())
@@ -129,7 +141,6 @@ def download():
         log(f"🎧 Downloading: {yt_url}")
         ydl_opts = {
             'format': 'bestaudio/best',
-            'cookiefile': 'cookies.txt',
             'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -140,10 +151,13 @@ def download():
             'noplaylist': True,
             'logtostderr': False,
             'progress_hooks': [lambda d: log(f"📦 {d['status']}: {d.get('filename', '')}")],
+            'http_headers': YDL_HEADERS
         }
 
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(yt_url, download=True)
+            # Optional: Short random delay after download
+            time.sleep(random.uniform(1.0, 2.0))
             raw_title = info['title']
             filename = sanitize_filename(raw_title) + ".mp3"
             file_path = os.path.join(DOWNLOAD_FOLDER, filename)
