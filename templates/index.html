@@ -195,6 +195,7 @@
           audio.controls = true;
           audio.className = "mt-3 w-full hidden";
 
+          // Updated Download button logic:
           downloadBtn.onclick = async () => {
             resultDiv.innerHTML = `<div class="animate-pulse text-yellow-400 font-semibold flex items-center gap-2">
                 <svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="#FACF2A" stroke-width="4"></circle></svg>
@@ -213,34 +214,51 @@
 
             const downloadData = await downloadRes.json();
             if (downloadData.status === "success") {
-              resultDiv.innerHTML = `<span class="text-green-300 font-semibold flex items-center gap-2">✅ Download ready: <a class="underline hover:text-green-400 transition" href="${downloadData.download_url}" target="_blank">${downloadData.file}</a></span>`;
+              resultDiv.innerHTML = `
+                <span class="text-green-300 font-semibold flex items-center gap-2">
+                  ✅ Download ready:
+                  <a class="underline hover:text-green-400 transition font-semibold" href="${downloadData.file_url}" target="_blank" download>
+                    ⬇ Download
+                  </a>
+                  &nbsp;|&nbsp;
+                  <a class="underline hover:text-blue-300 transition" href="${downloadData.stream_url}" target="_blank">
+                    ▶ Play in browser
+                  </a>
+                  <span class="ml-1 text-gray-300 text-xs">(${downloadData.title})</span>
+                </span>
+              `;
             } else {
               resultDiv.innerHTML = `<span class="text-red-400 font-bold">❌ Error: ${downloadData.message}</span>`;
             }
           };
 
+          // Play button logic (stream in browser tab)
           streamBtn.onclick = async () => {
             streamBtn.disabled = true;
             gsap.to(streamBtn, { scale: 0.94, yoyo: true, repeat: 1, duration: 0.10 });
             streamBtn.textContent = "🎧 Loading...";
-            const streamRes = await fetch("/stream", {
+            
+            // Eagerly trigger `/download` so file is available for streaming (same as download)
+            const downloadRes = await fetch("/download", {
               method: "POST",
               headers: { "Content-Type": "application/x-www-form-urlencoded" },
               body: `url=${encodeURIComponent(track.url)}`,
             });
+            const downloadData = await downloadRes.json();
 
-            const streamData = await streamRes.json();
-            if (streamData.status === "success") {
-              audio.src = streamData.stream_url;
+            if (downloadData.status === "success") {
+              audio.src = downloadData.stream_url;
               audio.classList.remove("hidden");
+              audio.play();
               streamBtn.textContent = "▶ Play Again";
               streamBtn.disabled = false;
               gsap.fromTo(audio, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.66, ease: "power2.out" });
             } else {
-              resultDiv.innerHTML = `<span class="text-red-400 font-bold">❌ Stream Error: ${streamData.message}</span>`;
+              resultDiv.innerHTML = `<span class="text-red-400 font-bold">❌ Stream Error: ${downloadData.message}</span>`;
               streamBtn.textContent = "▶ Play";
               streamBtn.disabled = false;
             }
+            // Update logs
             const logs = await fetch("/logs");
             const logText = await logs.json();
             logDiv.innerHTML = "";
