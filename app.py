@@ -23,14 +23,13 @@ def log(msg):
 def sanitize_filename(name):
     return re.sub(r'[\\/:"*?<>|]+', '-', name)
 
-# Spotify API auth (for search/track/metadata features)
+# Spotify API auth
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
     client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET")
 ))
 
 def scdl_download(url, output_dir):
-    """Downloads track/playlist/artist from SoundCloud using scdl CLI"""
     if shutil.which("scdl") is None:
         log("❌ scdl CLI not found. Install it by running: pip install scdl")
         return None
@@ -45,33 +44,39 @@ def scdl_download(url, output_dir):
         log(f"❌ scdl download failed: {e.stderr}")
         return None
 
-def get_spotify_song_details(spotify_url):
+def get_spotify_track(query):
+    """Search Spotify, return (title, artist) for the most relevant track."""
     try:
-        track_id = spotify_url.split("/")[-1].split("?")[0]
-        track = sp.track(track_id)
-        artist = track['artists'][0]['name']
+        results = sp.search(q=query, limit=1, type='track')
+        items = results['tracks']['items']
+        if not items:
+            log("❌ No song found on Spotify for query.")
+            return None, None
+        track = items[0]
         title = track['name']
+        artist = track['artists'][0]['name']
+        log(f"🎵 Best Spotify match: {artist} - {title}")
         return title, artist
     except Exception as e:
         log(f"❌ Spotify error: {e}")
         return None, None
 
 def search_soundcloud_track_url(query):
-    """Search SoundCloud via web scraping for the first track url matching the query."""
+    """Search SoundCloud, return the first track url matching the query."""
     log(f"🔍 Searching SoundCloud for: {query}")
     search_url = f"https://soundcloud.com/search/sounds?q={requests.utils.quote(query)}"
-    resp = requests.get(search_url, headers={
-        "User-Agent": "Mozilla/5.0"
-    })
+    resp = requests.get(search_url, headers={"User-Agent": "Mozilla/5.0"})
     soup = BeautifulSoup(resp.text, "html.parser")
-    # Find all links that look like track links: "/artistname/trackname"
+    # Find all <a> that look like /artistname/trackname
+    found = []
     for link in soup.find_all('a', href=True):
         href = link['href']
-        if href.startswith("/") and len(href.split("/")) == 3 and not href.startswith('/you/') and not ':' in href:
-            # Form a full link
-            full_url = f"https://soundcloud.com{href}"
-            log(f"🔎 Found SoundCloud track: {full_url}")
-            return full_url
+        if href.startswith("/") and len(href.split("/")) == 3 and not href.startswith('/you/') and ':' not in href:
+            found.append(href)
+    if found:
+        full_url = f"<https://soundcloud.com{found>[0]}"
+        log(f"🔎 Found SoundCloud track: {full_url}")
+        return full_url
     log("❌ No SoundCloud track found")
     return None
 
@@ -83,45 +88,21 @@ def index():
 def logs():
     return jsonify(LOGS)
 
-@app.route('/search', methods=['POST'])
-def search():
-    query = request.form.get('query')
-    if not query:
-        return jsonify({'status': 'error', 'message': 'No query provided'}), 400
-    log(f"🔎 Searching for: {query}")
-    try:
-        results = sp.search(q=query, limit=3, type='track')
-        items = results['tracks']['items']
-        if not items:
-            return jsonify({'status': 'error', 'message': 'No results found.'})
-        choices = [{
-            'name': f"{track['artists'][0]['name']} - {track['name']}",
-            'url': track['external_urls']['spotify']
-        } for track in items]
-        return jsonify({'status': 'success', 'choices': choices})
-    except Exception as e:
-        log(f"🔥 Error during search: {str(e)}")
-        return jsonify({'status': 'error', 'message': str(e)})
-
 @app.route('/download', methods=['POST'])
 def download():
-    url = request.form.get('url')
-    if not url:
-        return jsonify({'status': 'error', 'message': 'No track URL provided'}), 400
-
-    # If it's a Spotify link, resolve details then search SoundCloud!
-    if "open.spotify.com/track" in url:
-        title, artist = get_spotify_song_details(url)
-        if not (title and artist):
-            return jsonify({'status': 'error', 'message': 'Failed to get song details from Spotify'}), 500
-        sc_search_query = f"{artist} {title}"
-        soundcloud_url = search_soundcloud_track_url(sc_search_query)
-        if not soundcloud_url:
-            return jsonify({'status': 'error', 'message': 'Could not find track on SoundCloud'}), 404
-        url = soundcloud_url
-
-    # url is now a SoundCloud link!
-    success = scdl_download(url, DOWNLOAD_FOLDER)
+    song_query = request.form.get('query')
+    if not song_query:
+        return jsonify({'status': 'error', 'message': 'No song name provided'}), 400
+    # Search on Spotify for best match
+    title, artist = get_spotify_track(song_query)
+    if not (title and artist):
+        return jsonify({'status': 'error', 'message': 'No such song found on Spotify.'}), 404
+    # Search SoundCloud for best match
+    soundcloud_url = search_soundcloud_track_url(f"{artist} {title}")
+    if not soundcloud_url:
+        return jsonify({'status': 'error', 'message': 'Could not find track on SoundCloud.'}), 404
+    # Download using scdl
+    success = scdl_download(soundcloud_url, DOWNLOAD_FOLDER)
     if not success:
         return jsonify({'status': 'error', 'message': 'Download failed or scdl not installed.'}), 500
     # Find most recent mp3 file in the DOWNLOAD_FOLDER
@@ -133,7 +114,8 @@ def download():
     latest_file = files[0]
     return jsonify({
         'status': 'success',
-        'title': sanitize_filename(latest_file.replace('.mp3', '')),
+        'spotify_title': title,
+        'spotify_artist': artist,
         'file_url': f"/download-file/{latest_file}",
         'stream_url': f"/stream-file/{latest_file}"
     })
