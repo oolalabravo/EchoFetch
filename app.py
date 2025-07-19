@@ -34,6 +34,7 @@ def get_youtube_url_from_spotify(url):
             'quiet': True,
             'format': 'bestaudio/best',
             'noplaylist': True,
+            'cookiefile': 'cookies.txt',
         }
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(f"ytsearch1:{query}", download=False)
@@ -48,7 +49,8 @@ def download_mp3_to_memory(yt_url):
         buffer = BytesIO()
         ydl_opts = {
             'format': 'bestaudio/best',
-            'outtmpl': '-',  # output to stdout (not really, but we’ll redirect)
+            'cookiefile': 'cookies.txt',
+            'outtmpl': '%(title)s.%(ext)s',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
@@ -62,7 +64,6 @@ def download_mp3_to_memory(yt_url):
 
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(yt_url, download=False)
-            # Redownload with file saving
             mp3_file = ydl.prepare_filename(info).replace('.webm', '.mp3').replace('.m4a', '.mp3')
             ydl.download([yt_url])
             if os.path.exists(mp3_file):
