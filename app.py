@@ -64,18 +64,22 @@ def download_mp3_to_memory(yt_url):
 
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(yt_url, download=False)
-            mp3_file = ydl.prepare_filename(info).replace('.webm', '.mp3').replace('.m4a', '.mp3')
             ydl.download([yt_url])
-            if os.path.exists(mp3_file):
-                with open(mp3_file, 'rb') as f:
+            # Find the expected filename (usually sanitized title + .mp3)
+            mp3_filename = f"{info['title']}.mp3"
+            if os.path.exists(mp3_filename):
+                with open(mp3_filename, 'rb') as f:
                     buffer.write(f.read())
-                os.remove(mp3_file)
+                os.remove(mp3_filename)
                 buffer.seek(0)
                 return buffer
+            else:
+                log("❌ Expected MP3 file not found.")
         return None
     except Exception as e:
         log(f"❌ MP3 download failed: {str(e)}")
         return None
+
 
 @app.route('/')
 def index():
