@@ -1,11 +1,5 @@
 from flask import Flask, render_template, request, jsonify, Response, send_file, send_from_directory
-from spotipy.oauth2 import SpotifyClientCredentials
-import spotipy, os, re, time, random
-from io import BytesIO
-import subprocess
-import shutil
-import requests
-from bs4 import BeautifulSoup
+import os, re, time, subprocess, shutil
 
 app = Flask(__name__)
 LOGS = []
@@ -23,19 +17,14 @@ def log(msg):
 def sanitize_filename(name):
     return re.sub(r'[\\/:"*?<>|]+', '-', name)
 
-# Spotify API auth
-sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
-    client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
-    client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET")
-))
-
-def scdl_download(url, output_dir):
+def scdl_download_by_search(query, output_dir):
+    """Use scdl to search and download the best matching SoundCloud track."""
     if shutil.which("scdl") is None:
         log("❌ scdl CLI not found. Install it by running: pip install scdl")
         return None
-    cmd = ["scdl", "-l", url, "--path", output_dir, "--onlymp3"]
+    cmd = ["scdl", "-s", query, "--path", output_dir, "--onlymp3"]
     try:
-        log(f"🎧 Running scdl download for: {url}")
+        log(f"🎧 Running scdl search and download for: {query}")
         completed = subprocess.run(cmd, capture_output=True, text=True, check=True)
         log(f"📥 scdl output: {completed.stdout}")
         log("✅ scdl download completed")
@@ -44,45 +33,9 @@ def scdl_download(url, output_dir):
         log(f"❌ scdl download failed: {e.stderr}")
         return None
 
-def get_spotify_track(query):
-    """Search Spotify, return (title, artist) for the most relevant track."""
-    try:
-        results = sp.search(q=query, limit=1, type='track')
-        items = results['tracks']['items']
-        if not items:
-            log("❌ No song found on Spotify for query.")
-            return None, None
-        track = items[0]
-        title = track['name']
-        artist = track['artists'][0]['name']
-        log(f"🎵 Best Spotify match: {artist} - {title}")
-        return title, artist
-    except Exception as e:
-        log(f"❌ Spotify error: {e}")
-        return None, None
-
-def search_soundcloud_track_url(query):
-    """Search SoundCloud, return the first track url matching the query."""
-    log(f"🔍 Searching SoundCloud for: {query}")
-    search_url = f"https://soundcloud.com/search/sounds?q={requests.utils.quote(query)}"
-    resp = requests.get(search_url, headers={"User-Agent": "Mozilla/5.0"})
-    soup = BeautifulSoup(resp.text, "html.parser")
-    # Find all <a> that look like /artistname/trackname
-    found = []
-    for link in soup.find_all('a', href=True):
-        href = link['href']
-        if href.startswith("/") and len(href.split("/")) == 3 and not href.startswith('/you/') and ':' not in href:
-            found.append(href)
-    if found:
-        full_url = f"<https://soundcloud.com{found>[0]}"
-        log(f"🔎 Found SoundCloud track: {full_url}")
-        return full_url
-    log("❌ No SoundCloud track found")
-    return None
-
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html')  # Make a basic HTML form that lets user POST 'query'
 
 @app.route('/logs')
 def logs():
@@ -93,18 +46,12 @@ def download():
     song_query = request.form.get('query')
     if not song_query:
         return jsonify({'status': 'error', 'message': 'No song name provided'}), 400
-    # Search on Spotify for best match
-    title, artist = get_spotify_track(song_query)
-    if not (title and artist):
-        return jsonify({'status': 'error', 'message': 'No such song found on Spotify.'}), 404
-    # Search SoundCloud for best match
-    soundcloud_url = search_soundcloud_track_url(f"{artist} {title}")
-    if not soundcloud_url:
-        return jsonify({'status': 'error', 'message': 'Could not find track on SoundCloud.'}), 404
-    # Download using scdl
-    success = scdl_download(soundcloud_url, DOWNLOAD_FOLDER)
+
+    # Use scdl's built-in search to download best match
+    success = scdl_download_by_search(song_query, DOWNLOAD_FOLDER)
     if not success:
         return jsonify({'status': 'error', 'message': 'Download failed or scdl not installed.'}), 500
+
     # Find most recent mp3 file in the DOWNLOAD_FOLDER
     files = [f for f in os.listdir(DOWNLOAD_FOLDER) if f.lower().endswith('.mp3')]
     if not files:
@@ -112,10 +59,10 @@ def download():
         return jsonify({'status': 'error', 'message': 'No MP3 file found after download.'}), 500
     files = sorted(files, key=lambda f: os.path.getmtime(os.path.join(DOWNLOAD_FOLDER, f)), reverse=True)
     latest_file = files[0]
+
     return jsonify({
         'status': 'success',
-        'spotify_title': title,
-        'spotify_artist': artist,
+        'title': sanitize_filename(latest_file.replace('.mp3', '')),
         'file_url': f"/download-file/{latest_file}",
         'stream_url': f"/stream-file/{latest_file}"
     })
@@ -143,5 +90,4 @@ def progress_stream():
 
 if __name__ == '__main__':
     log("🚀 Flask App Initialized")
-    log("✅ Spotify client authenticated successfully")
     app.run(host="0.0.0.0", port=5000, debug=True)
