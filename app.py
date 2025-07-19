@@ -1,13 +1,12 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory, Response
+from flask import Flask, render_template, request, jsonify, Response, send_file
 from spotipy.oauth2 import SpotifyClientCredentials
-import spotipy, subprocess, os, re, time
+import spotipy, subprocess, os, re, time, tempfile
+from io import BytesIO
 
-# Ensure ffmpeg path
+# Setup environment
 os.environ["PATH"] += os.pathsep + os.path.abspath("ffmpeg")
 
 app = Flask(__name__)
-DOWNLOAD_FOLDER = os.path.join(os.getcwd(), "downloads")
-os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 LOGS = []
 
 def log(msg):
@@ -19,36 +18,49 @@ def log(msg):
 def sanitize_filename(name):
     return re.sub(r'[\\/:"*?<>|]+', '-', name)
 
-def download_track(url):
-    try:
-        track_id = url.split("/")[-1].split("?")[0]
-        track = sp.track(track_id)
-        artist = track['artists'][0]['name']
-        title = track['name']
-        safe_filename = sanitize_filename(f"{artist} - {title}.mp3")
-        output_path = os.path.join(DOWNLOAD_FOLDER, safe_filename)
-
-        cmd = ["spotdl", url, "--output", output_path]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-
-        for line in result.stdout.strip().split('\n'):
-            log(f"📦 spotdl: {line}")
-        for line in result.stderr.strip().split('\n'):
-            log(f"📦 spotdl ERR: {line}")
-
-        if os.path.exists(output_path):
-            return safe_filename
-        else:
-            return None
-    except Exception as e:
-        log(f"🔥 Error in download_track: {str(e)}")
-        return None
-
-# Initialize Spotify API
+# Spotify API auth
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
     client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET")
 ))
+
+def get_youtube_url_from_spotify(url):
+    track_id = url.split("/")[-1].split("?")[0]
+    track = sp.track(track_id)
+    artist = track['artists'][0]['name']
+    title = track['name']
+    query = f"{artist} - {title} audio"
+    log(f"🔍 Searching YouTube for: {query}")
+
+    yt_search = subprocess.run(
+        ["yt-dlp", f"ytsearch1:{query}", "--print", "url"],
+        capture_output=True, text=True
+    )
+
+    return yt_search.stdout.strip()
+
+def download_mp3_to_memory(yt_url):
+    with tempfile.NamedTemporaryFile(suffix=".mp3") as tmp_file:
+        log(f"🎧 Downloading: {yt_url}")
+        cmd = [
+            "yt-dlp",
+            "-x", "--audio-format", "mp3",
+            "--ffmpeg-location", "ffmpeg",
+            "-o", tmp_file.name,
+            yt_url
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        for line in result.stdout.strip().split('\n'):
+            log(f"📦 yt-dlp: {line}")
+        for line in result.stderr.strip().split('\n'):
+            log(f"📦 yt-dlp ERR: {line}")
+
+        if os.path.exists(tmp_file.name):
+            tmp_file.seek(0)
+            mp3_data = BytesIO(tmp_file.read())
+            return mp3_data
+        return None
 
 @app.route('/')
 def index():
@@ -87,22 +99,16 @@ def download():
     if not url:
         return jsonify({'status': 'error', 'message': 'No track URL provided'}), 400
 
-    log(f"🎧 Downloading track: {url}")
-    filename = download_track(url)
-    if filename:
-        log(f"✅ File ready: {filename}")
-        return jsonify({
-            'status': 'success',
-            'file': filename,
-            'download_url': f'/download-file/{filename}'
-        })
-    else:
-        log("❌ MP3 not found after download.")
-        return jsonify({'status': 'error', 'message': 'MP3 not found after download.'})
+    yt_url = get_youtube_url_from_spotify(url)
+    if not yt_url:
+        return jsonify({'status': 'error', 'message': 'Could not find YouTube URL.'})
 
-@app.route('/download-file/<filename>')
-def download_file(filename):
-    return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=True)
+    mp3_data = download_mp3_to_memory(yt_url)
+    if mp3_data:
+        filename = sanitize_filename(yt_url.split("=")[-1]) + ".mp3"
+        return send_file(mp3_data, mimetype="audio/mpeg", as_attachment=True, download_name=filename)
+    else:
+        return jsonify({'status': 'error', 'message': 'MP3 not available'}), 500
 
 @app.route('/stream', methods=['POST'])
 def stream():
@@ -110,21 +116,15 @@ def stream():
     if not url:
         return jsonify({'status': 'error', 'message': 'No track URL provided'}), 400
 
-    log(f"📡 Streaming request for: {url}")
-    filename = download_track(url)
-    if filename:
-        log(f"🎶 Stream ready: {filename}")
-        return jsonify({
-            'status': 'success',
-            'stream_url': f'/stream-file/{filename}'
-        })
-    else:
-        log("❌ MP3 not found for streaming.")
-        return jsonify({'status': 'error', 'message': 'MP3 not found for streaming.'})
+    yt_url = get_youtube_url_from_spotify(url)
+    if not yt_url:
+        return jsonify({'status': 'error', 'message': 'Could not find YouTube URL.'})
 
-@app.route('/stream-file/<filename>')
-def stream_file(filename):
-    return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=False, mimetype='audio/mpeg')
+    mp3_data = download_mp3_to_memory(yt_url)
+    if mp3_data:
+        return send_file(mp3_data, mimetype="audio/mpeg", as_attachment=False)
+    else:
+        return jsonify({'status': 'error', 'message': 'MP3 not streamable'}), 500
 
 @app.route('/progress-stream')
 def progress_stream():
@@ -141,6 +141,5 @@ def progress_stream():
 
 if __name__ == '__main__':
     log("🚀 Flask App Initialized")
-    log(f"📁 Download folder ready at: {DOWNLOAD_FOLDER}")
     log("✅ Spotify client authenticated successfully")
     app.run(host="0.0.0.0", port=5000, debug=True)
