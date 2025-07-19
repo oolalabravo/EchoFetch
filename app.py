@@ -141,22 +141,25 @@ def download():
 
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(yt_url, download=True)
-            filename = sanitize_filename(info['title']) + ".mp3"
+            raw_title = info['title']
+            filename = sanitize_filename(raw_title) + ".mp3"
             file_path = f"static/{filename}"
 
             if os.path.exists(file_path):
-                # ✅ Return file URL to frontend
+                # ✅ Send back public URL for stream/download
                 return jsonify({
                     'status': 'success',
                     'file_url': f"/static/{filename}",
-                    'title': info['title']
+                    'title': raw_title
                 })
             else:
-                log("❌ File was not found after supposed download.")
+                log("❌ File not found after download.")
                 return jsonify({'status': 'error', 'message': 'File not found after download'}), 500
+
     except Exception as e:
         log(f"❌ Error during download: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 
 @app.route('/stream', methods=['POST'])
