@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, Response, send_file
+from flask import Flask, render_template, request, jsonify, Response, send_file, send_from_directory
 from spotipy.oauth2 import SpotifyClientCredentials
 import spotipy, os, re, time
 from io import BytesIO
@@ -6,6 +6,10 @@ from yt_dlp import YoutubeDL
 
 app = Flask(__name__)
 LOGS = []
+DOWNLOAD_FOLDER = "static"
+
+# Create download folder if not exists
+os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 def log(msg):
     print(msg)
@@ -65,7 +69,6 @@ def download_mp3_to_memory(yt_url):
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(yt_url, download=False)
             ydl.download([yt_url])
-            # Find the expected filename (usually sanitized title + .mp3)
             mp3_filename = f"{info['title']}.mp3"
             if os.path.exists(mp3_filename):
                 with open(mp3_filename, 'rb') as f:
@@ -127,7 +130,7 @@ def download():
         ydl_opts = {
             'format': 'bestaudio/best',
             'cookiefile': 'cookies.txt',
-            'outtmpl': 'static/%(title)s.%(ext)s',
+            'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
@@ -143,14 +146,15 @@ def download():
             info = ydl.extract_info(yt_url, download=True)
             raw_title = info['title']
             filename = sanitize_filename(raw_title) + ".mp3"
-            file_path = f"static/{filename}"
+            file_path = os.path.join(DOWNLOAD_FOLDER, filename)
 
             if os.path.exists(file_path):
-                # ✅ Send back public URL for stream/download
+                # ✅ Return both stream and download links
                 return jsonify({
                     'status': 'success',
-                    'file_url': f"/static/{filename}",
-                    'title': raw_title
+                    'title': raw_title,
+                    'file_url': f"/download-file/{filename}",
+                    'stream_url': f"/stream-file/{filename}"
                 })
             else:
                 log("❌ File not found after download.")
@@ -160,7 +164,13 @@ def download():
         log(f"❌ Error during download: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/download-file/<path:filename>')
+def download_file(filename):
+    return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=True)
 
+@app.route('/stream-file/<path:filename>')
+def stream_file(filename):
+    return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=False)
 
 @app.route('/stream', methods=['POST'])
 def stream():
