@@ -4,6 +4,8 @@ import spotipy, os, re, time, random
 from io import BytesIO
 import subprocess
 import shutil
+import requests
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 LOGS = []
@@ -43,6 +45,36 @@ def scdl_download(url, output_dir):
         log(f"❌ scdl download failed: {e.stderr}")
         return None
 
+def get_spotify_song_details(spotify_url):
+    try:
+        track_id = spotify_url.split("/")[-1].split("?")[0]
+        track = sp.track(track_id)
+        artist = track['artists'][0]['name']
+        title = track['name']
+        return title, artist
+    except Exception as e:
+        log(f"❌ Spotify error: {e}")
+        return None, None
+
+def search_soundcloud_track_url(query):
+    """Search SoundCloud via web scraping for the first track url matching the query."""
+    log(f"🔍 Searching SoundCloud for: {query}")
+    search_url = f"https://soundcloud.com/search/sounds?q={requests.utils.quote(query)}"
+    resp = requests.get(search_url, headers={
+        "User-Agent": "Mozilla/5.0"
+    })
+    soup = BeautifulSoup(resp.text, "html.parser")
+    # Find all links that look like track links: "/artistname/trackname"
+    for link in soup.find_all('a', href=True):
+        href = link['href']
+        if href.startswith("/") and len(href.split("/")) == 3 and not href.startswith('/you/') and not ':' in href:
+            # Form a full link
+            full_url = f"https://soundcloud.com{href}"
+            log(f"🔎 Found SoundCloud track: {full_url}")
+            return full_url
+    log("❌ No SoundCloud track found")
+    return None
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -76,6 +108,19 @@ def download():
     url = request.form.get('url')
     if not url:
         return jsonify({'status': 'error', 'message': 'No track URL provided'}), 400
+
+    # If it's a Spotify link, resolve details then search SoundCloud!
+    if "open.spotify.com/track" in url:
+        title, artist = get_spotify_song_details(url)
+        if not (title and artist):
+            return jsonify({'status': 'error', 'message': 'Failed to get song details from Spotify'}), 500
+        sc_search_query = f"{artist} {title}"
+        soundcloud_url = search_soundcloud_track_url(sc_search_query)
+        if not soundcloud_url:
+            return jsonify({'status': 'error', 'message': 'Could not find track on SoundCloud'}), 404
+        url = soundcloud_url
+
+    # url is now a SoundCloud link!
     success = scdl_download(url, DOWNLOAD_FOLDER)
     if not success:
         return jsonify({'status': 'error', 'message': 'Download failed or scdl not installed.'}), 500
