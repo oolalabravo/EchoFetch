@@ -1,5 +1,7 @@
-from flask import Flask, render_template, request, jsonify, Response, send_file, send_from_directory
+from flask import Flask, render_template, request, jsonify, Response, send_from_directory
 import os, re, time, subprocess, shutil
+from spotipy.oauth2 import SpotifyClientCredentials
+import spotipy
 
 app = Flask(__name__)
 LOGS = []
@@ -18,7 +20,6 @@ def sanitize_filename(name):
     return re.sub(r'[\\/:"*?<>|]+', '-', name)
 
 def scdl_download_by_search(query, output_dir):
-    """Use scdl to search and download the best matching SoundCloud track."""
     if shutil.which("scdl") is None:
         log("❌ scdl CLI not found. Install it by running: pip install scdl")
         return None
@@ -33,22 +34,48 @@ def scdl_download_by_search(query, output_dir):
         log(f"❌ scdl download failed: {e.stderr}")
         return None
 
+# Spotify API (for search, not downloading)
+sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
+    client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
+    client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET")
+))
+
 @app.route('/')
 def index():
-    return render_template('index.html')  # Make a basic HTML form that lets user POST 'query'
+    return render_template('index.html')
 
 @app.route('/logs')
 def logs():
     return jsonify(LOGS)
 
+@app.route('/search', methods=['POST'])
+def search():
+    query = request.form.get('query')
+    if not query:
+        return jsonify({'status': 'error', 'message': 'No query provided'}), 400
+    log(f"🔎 Searching Spotify for: {query}")
+    try:
+        results = sp.search(q=query, limit=4, type='track')
+        items = results['tracks']['items']
+        if not items:
+            return jsonify({'status': 'error', 'message': 'No results found.'})
+        choices = [{
+            'name': f"{track['artists'][0]['name']} - {track['name']}",
+            'url': track['external_urls']['spotify']
+        } for track in items]
+        return jsonify({'status': 'success', 'choices': choices})
+    except Exception as e:
+        log(f"🔥 Spotify search error: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)})
+
 @app.route('/download', methods=['POST'])
 def download():
-    song_query = request.form.get('query')
-    if not song_query:
+    display_query = request.form.get('query') or request.form.get('url')
+    if not display_query:
         return jsonify({'status': 'error', 'message': 'No song name provided'}), 400
 
     # Use scdl's built-in search to download best match
-    success = scdl_download_by_search(song_query, DOWNLOAD_FOLDER)
+    success = scdl_download_by_search(display_query, DOWNLOAD_FOLDER)
     if not success:
         return jsonify({'status': 'error', 'message': 'Download failed or scdl not installed.'}), 500
 
