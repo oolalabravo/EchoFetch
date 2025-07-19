@@ -1,10 +1,8 @@
 from flask import Flask, render_template, request, jsonify, Response, send_file
 from spotipy.oauth2 import SpotifyClientCredentials
-import spotipy, subprocess, os, re, time, tempfile
+import spotipy, os, re, time
 from io import BytesIO
-
-# Setup environment
-os.environ["PATH"] += os.pathsep + os.path.abspath("ffmpeg")
+from yt_dlp import YoutubeDL
 
 app = Flask(__name__)
 LOGS = []
@@ -25,41 +23,57 @@ sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
 ))
 
 def get_youtube_url_from_spotify(url):
-    track_id = url.split("/")[-1].split("?")[0]
-    track = sp.track(track_id)
-    artist = track['artists'][0]['name']
-    title = track['name']
-    query = f"{artist} - {title} audio"
-    log(f"🔍 Searching YouTube for: {query}")
-
-    yt_search = subprocess.run(
-        ["yt-dlp", f"ytsearch1:{query}", "--print", "url"],
-        capture_output=True, text=True
-    )
-
-    return yt_search.stdout.strip()
+    try:
+        track_id = url.split("/")[-1].split("?")[0]
+        track = sp.track(track_id)
+        artist = track['artists'][0]['name']
+        title = track['name']
+        query = f"{artist} - {title} audio"
+        log(f"🔍 Searching YouTube for: {query}")
+        ydl_opts = {
+            'quiet': True,
+            'format': 'bestaudio/best',
+            'noplaylist': True,
+        }
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"ytsearch1:{query}", download=False)
+            return info['entries'][0]['webpage_url']
+    except Exception as e:
+        log(f"❌ YouTube search failed: {str(e)}")
+        return None
 
 def download_mp3_to_memory(yt_url):
-    with tempfile.NamedTemporaryFile(suffix=".mp3") as tmp_file:
+    try:
         log(f"🎧 Downloading: {yt_url}")
-        cmd = [
-            "yt-dlp",
-            "-x", "--audio-format", "mp3",
-            "--ffmpeg-location", "ffmpeg",
-            "-o", tmp_file.name,
-            yt_url
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        buffer = BytesIO()
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': '-',  # output to stdout (not really, but we’ll redirect)
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': True,
+            'noplaylist': True,
+            'logtostderr': False,
+            'progress_hooks': [lambda d: log(f"📦 {d['status']}: {d.get('filename', '')}")],
+        }
 
-        for line in result.stdout.strip().split('\n'):
-            log(f"📦 yt-dlp: {line}")
-        for line in result.stderr.strip().split('\n'):
-            log(f"📦 yt-dlp ERR: {line}")
-
-        if os.path.exists(tmp_file.name):
-            tmp_file.seek(0)
-            mp3_data = BytesIO(tmp_file.read())
-            return mp3_data
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(yt_url, download=False)
+            # Redownload with file saving
+            mp3_file = ydl.prepare_filename(info).replace('.webm', '.mp3').replace('.m4a', '.mp3')
+            ydl.download([yt_url])
+            if os.path.exists(mp3_file):
+                with open(mp3_file, 'rb') as f:
+                    buffer.write(f.read())
+                os.remove(mp3_file)
+                buffer.seek(0)
+                return buffer
+        return None
+    except Exception as e:
+        log(f"❌ MP3 download failed: {str(e)}")
         return None
 
 @app.route('/')
