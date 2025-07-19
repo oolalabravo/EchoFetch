@@ -56,4 +56,5 @@ gunicorn
 yt-dlp
 ffmpeg-python
 scdl
-
+requests
+beautifulsoup4
