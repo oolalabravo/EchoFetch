@@ -2,7 +2,8 @@ from flask import Flask, render_template, request, jsonify, Response, send_file,
 from spotipy.oauth2 import SpotifyClientCredentials
 import spotipy, os, re, time, random
 from io import BytesIO
-from yt_dlp import YoutubeDL
+import subprocess
+import shutil
 
 app = Flask(__name__)
 LOGS = []
@@ -20,81 +21,27 @@ def log(msg):
 def sanitize_filename(name):
     return re.sub(r'[\\/:"*?<>|]+', '-', name)
 
-# Spotify API auth
+# Spotify API auth (for search/track/metadata features)
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
     client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET")
 ))
 
-YDL_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    )
-}
-
-def get_youtube_url_from_spotify(url):
+def scdl_download(url, output_dir):
+    """Downloads track/playlist/artist from SoundCloud using scdl CLI"""
+    if shutil.which("scdl") is None:
+        log("❌ scdl CLI not found. Install it by running: pip install scdl")
+        return None
+    cmd = ["scdl", "-l", url, "--path", output_dir, "--onlymp3"]
     try:
-        track_id = url.split("/")[-1].split("?")[0]
-        track = sp.track(track_id)
-        artist = track['artists'][0]['name']
-        title = track['name']
-        query = f"{artist} - {title} audio"
-        log(f"🔍 Searching YouTube for: {query}")
-        ydl_opts = {
-            'quiet': True,
-            'format': 'bestaudio/best',
-            'noplaylist': True,
-            'http_headers': YDL_HEADERS
-        }
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"ytsearch1:{query}", download=False)
-            # Optional: Short random delay to mimic human
-            time.sleep(random.uniform(1.0, 2.0))
-            return info['entries'][0]['webpage_url']
-    except Exception as e:
-        log(f"❌ YouTube search failed: {str(e)}")
+        log(f"🎧 Running scdl download for: {url}")
+        completed = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        log(f"📥 scdl output: {completed.stdout}")
+        log("✅ scdl download completed")
+        return True
+    except subprocess.CalledProcessError as e:
+        log(f"❌ scdl download failed: {e.stderr}")
         return None
-
-def download_mp3_to_memory(yt_url):
-    try:
-        log(f"🎧 Downloading: {yt_url}")
-        buffer = BytesIO()
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': '%(title)s.%(ext)s',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': True,
-            'noplaylist': True,
-            'logtostderr': False,
-            'progress_hooks': [lambda d: log(f"📦 {d['status']}: {d.get('filename', '')}")],
-            'http_headers': YDL_HEADERS
-        }
-
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(yt_url, download=False)
-            ydl.download([yt_url])
-            mp3_filename = f"{info['title']}.mp3"
-            # Optional: Short random delay after download
-            time.sleep(random.uniform(1.0, 2.0))
-            if os.path.exists(mp3_filename):
-                with open(mp3_filename, 'rb') as f:
-                    buffer.write(f.read())
-                os.remove(mp3_filename)
-                buffer.seek(0)
-                return buffer
-            else:
-                log("❌ Expected MP3 file not found.")
-        return None
-    except Exception as e:
-        log(f"❌ MP3 download failed: {str(e)}")
-        return None
-
 
 @app.route('/')
 def index():
@@ -109,19 +56,16 @@ def search():
     query = request.form.get('query')
     if not query:
         return jsonify({'status': 'error', 'message': 'No query provided'}), 400
-
     log(f"🔎 Searching for: {query}")
     try:
         results = sp.search(q=query, limit=3, type='track')
         items = results['tracks']['items']
         if not items:
             return jsonify({'status': 'error', 'message': 'No results found.'})
-
         choices = [{
             'name': f"{track['artists'][0]['name']} - {track['name']}",
             'url': track['external_urls']['spotify']
         } for track in items]
-
         return jsonify({'status': 'success', 'choices': choices})
     except Exception as e:
         log(f"🔥 Error during search: {str(e)}")
@@ -132,51 +76,22 @@ def download():
     url = request.form.get('url')
     if not url:
         return jsonify({'status': 'error', 'message': 'No track URL provided'}), 400
-
-    yt_url = get_youtube_url_from_spotify(url)
-    if not yt_url:
-        return jsonify({'status': 'error', 'message': 'Could not find YouTube URL.'})
-
-    try:
-        log(f"🎧 Downloading: {yt_url}")
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': True,
-            'noplaylist': True,
-            'logtostderr': False,
-            'progress_hooks': [lambda d: log(f"📦 {d['status']}: {d.get('filename', '')}")],
-            'http_headers': YDL_HEADERS
-        }
-
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(yt_url, download=True)
-            # Optional: Short random delay after download
-            time.sleep(random.uniform(1.0, 2.0))
-            raw_title = info['title']
-            filename = sanitize_filename(raw_title) + ".mp3"
-            file_path = os.path.join(DOWNLOAD_FOLDER, filename)
-
-            if os.path.exists(file_path):
-                # ✅ Return both stream and download links
-                return jsonify({
-                    'status': 'success',
-                    'title': raw_title,
-                    'file_url': f"/download-file/{filename}",
-                    'stream_url': f"/stream-file/{filename}"
-                })
-            else:
-                log("❌ File not found after download.")
-                return jsonify({'status': 'error', 'message': 'File not found after download'}), 500
-
-    except Exception as e:
-        log(f"❌ Error during download: {str(e)}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+    success = scdl_download(url, DOWNLOAD_FOLDER)
+    if not success:
+        return jsonify({'status': 'error', 'message': 'Download failed or scdl not installed.'}), 500
+    # Find most recent mp3 file in the DOWNLOAD_FOLDER
+    files = [f for f in os.listdir(DOWNLOAD_FOLDER) if f.lower().endswith('.mp3')]
+    if not files:
+        log("❌ No MP3 files found after scdl download.")
+        return jsonify({'status': 'error', 'message': 'No MP3 file found after download.'}), 500
+    files = sorted(files, key=lambda f: os.path.getmtime(os.path.join(DOWNLOAD_FOLDER, f)), reverse=True)
+    latest_file = files[0]
+    return jsonify({
+        'status': 'success',
+        'title': sanitize_filename(latest_file.replace('.mp3', '')),
+        'file_url': f"/download-file/{latest_file}",
+        'stream_url': f"/stream-file/{latest_file}"
+    })
 
 @app.route('/download-file/<path:filename>')
 def download_file(filename):
@@ -185,22 +100,6 @@ def download_file(filename):
 @app.route('/stream-file/<path:filename>')
 def stream_file(filename):
     return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=False)
-
-@app.route('/stream', methods=['POST'])
-def stream():
-    url = request.form.get('url')
-    if not url:
-        return jsonify({'status': 'error', 'message': 'No track URL provided'}), 400
-
-    yt_url = get_youtube_url_from_spotify(url)
-    if not yt_url:
-        return jsonify({'status': 'error', 'message': 'Could not find YouTube URL.'})
-
-    mp3_data = download_mp3_to_memory(yt_url)
-    if mp3_data:
-        return send_file(mp3_data, mimetype="audio/mpeg", as_attachment=False)
-    else:
-        return jsonify({'status': 'error', 'message': 'MP3 not streamable'}), 500
 
 @app.route('/progress-stream')
 def progress_stream():
