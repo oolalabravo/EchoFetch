@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify, Response, send_from_
 import os, re, time, subprocess, shutil
 from spotipy.oauth2 import SpotifyClientCredentials
 import spotipy
+from musicdl import musicdl
 
 app = Flask(__name__)
 LOGS = []
@@ -20,23 +21,25 @@ def sanitize_filename(name):
     return re.sub(r'[\\/:"*?<>|]+', '-', name)
 
 def download_song(query, output_dir):
-    filename_pattern = os.path.join(output_dir, "%(title)s.%(ext)s")
-
-    # Try scdl first
-    if shutil.which("scdl"):
-        scdl_cmd = ["scdl", "-s", query, "--path", output_dir, "--onlymp3"]
-        try:
-            log(f"🎧 Trying scdl for: {query}")
-            completed = subprocess.run(scdl_cmd, capture_output=True, text=True, check=True)
-            log(f"📥 scdl output: {completed.stdout}")
-            log("✅ scdl download completed")
-            return True
-        except subprocess.CalledProcessError as e:
-            log(f"⚠️ scdl failed: {e.stderr.strip()}")
-
-    # Fallback to yt-dlp
-    if shutil.which("yt-dlp") is None:
-        log("❌ yt-dlp not found. Install it via: pip install yt-dlp")
+    log(f"🎧 Using MusicDL to search and download: {query}")
+    
+    config = {
+        'logfilepath': 'musicdl.log',
+        'savedir': output_dir,
+        'search_size_per_source': 5,
+        'proxies': {}
+    }
+    target_srcs = [
+        'kugou', 'kuwo', 'qqmusic', 'qianqian', 'fivesing',
+        'netease', 'migu', 'joox', 'yiting',
+    ]
+    try:
+        client = musicdl.musicdl(config=config)
+        client.run(target_srcs, keywords=[query])
+        log("✅ MusicDL download completed.")
+        return True
+    except Exception as e:
+        log(f"❌ MusicDL failed: {e}")
         return None
 
     ytdlp_cmd = [
