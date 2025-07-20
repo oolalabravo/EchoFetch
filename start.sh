@@ -5,8 +5,8 @@ set -e
 
 # Step 1: Install dependencies
 echo "[*] Installing dependencies..."
-sudo apt update
-sudo apt install -y torsocks ffmpeg tor python3-pip
+apt update
+apt install -y torsocks ffmpeg tor python3-pip
 
 # Step 2: Upgrade yt-dlp
 echo "[*] Installing yt-dlp..."
@@ -16,9 +16,9 @@ pip install -U yt-dlp
 echo "[*] Starting Tor..."
 tor &
 
-# Give Tor a few seconds to initialize
+# Wait for Tor to initialize
 sleep 10
 
-# Step 4: Launch your Python app
+# Step 4: Launch your Python app via torsocks
 echo "[*] Starting your app..."
 torsocks python3 app.py
