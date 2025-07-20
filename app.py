@@ -1,14 +1,11 @@
 from flask import Flask, render_template, request, jsonify, Response, send_from_directory
-import os, re, time, subprocess, shutil
+import os, re, time, subprocess
 from spotipy.oauth2 import SpotifyClientCredentials
 import spotipy
-
 
 app = Flask(__name__)
 LOGS = []
 DOWNLOAD_FOLDER = "static"
-
-# Create download folder if not exists
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 def log(msg):
@@ -20,41 +17,31 @@ def log(msg):
 def sanitize_filename(name):
     return re.sub(r'[\\/:"*?<>|]+', '-', name)
 
-def download_song(query, output_dir):
-    log(f"🎧 Using MusicDL CLI to search and download: {query}")
-
-    cli_cmd = [
-        'musicdl',
-        '-s', query,
-        '--savedir', output_dir,
-        '--logfilepath', os.path.join(output_dir, 'musicdl.log'),
-    ]
-
-    log(f"⚙️ Running: {' '.join(cli_cmd)}")
+def download_with_manzana(apple_music_url, output_dir):
+    log(f"🎧 Using Manzana to download: {apple_music_url}")
+    cmd = ["python", "manzana.py", apple_music_url]
 
     try:
-        proc = subprocess.run(
-            cli_cmd,
+        result = subprocess.run(
+            cmd,
+            cwd=os.path.abspath("."),  # run from project root
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=180
+            timeout=300
         )
-        log(proc.stdout.strip())
-        if proc.returncode == 0:
-            log("✅ MusicDL download completed.")
+        log(result.stdout)
+        if result.returncode == 0:
+            log("✅ Manzana download completed.")
             return True
         else:
-            log(f"❌ MusicDL CLI error: {proc.stderr.strip()}")
-            return None
+            log(f"❌ Manzana CLI error: {result.stderr.strip()}")
+            return False
     except Exception as e:
-        log(f"❌ MusicDL subprocess error: {e}")
-        return None
+        log(f"❌ Manzana subprocess exception: {e}")
+        return False
 
-
-
-
-# Spotify API (for search, not downloading)
+# Spotify API
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
     client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET")
@@ -79,10 +66,13 @@ def search():
         items = results['tracks']['items']
         if not items:
             return jsonify({'status': 'error', 'message': 'No results found.'})
-        choices = [{
-            'name': f"{track['artists'][0]['name']} - {track['name']}",
-            'url': track['external_urls']['spotify']
-        } for track in items]
+        choices = []
+        for track in items:
+            artist = track['artists'][0]['name']
+            name = track['name']
+            url = track['external_urls']['spotify']
+            apple_guess = f"https://music.apple.com/search?term={artist.replace(' ', '+')}+{name.replace(' ', '+')}"
+            choices.append({'name': f"{artist} - {name}", 'url': url, 'apple_hint': apple_guess})
         return jsonify({'status': 'success', 'choices': choices})
     except Exception as e:
         log(f"🔥 Spotify search error: {str(e)}")
@@ -90,42 +80,27 @@ def search():
 
 @app.route('/download', methods=['POST'])
 def download():
-    spotify_url = request.form.get('url')
-    if not spotify_url:
-        return jsonify({'status': 'error', 'message': 'No Spotify track URL provided'}), 400
+    apple_music_url = request.form.get('apple_url')
+    if not apple_music_url:
+        return jsonify({'status': 'error', 'message': 'No Apple Music URL provided'}), 400
 
-    # Extract track info from Spotify
-    try:
-        track_id = spotify_url.split("/")[-1].split("?")[0]
-        track_info = sp.track(track_id)
-        artist_name = track_info['artists'][0]['name']
-        track_name = track_info['name']
-        search_query = f"{artist_name} - {track_name}"
-        log(f"🎼 Resolved track info: {search_query}")
-    except Exception as e:
-        log(f"❌ Failed to resolve Spotify track info: {e}")
-        return jsonify({'status': 'error', 'message': 'Invalid Spotify URL or API error'}), 400
-
-    # Download using scdl with refined search
-    success = download_song(search_query, DOWNLOAD_FOLDER)
+    log(f"🎯 Using Apple Music URL: {apple_music_url}")
+    success = download_with_manzana(apple_music_url, DOWNLOAD_FOLDER)
     if not success:
-        return jsonify({'status': 'error', 'message': 'Download failed or scdl not installed.'}), 500
+        return jsonify({'status': 'error', 'message': 'Download failed using Manzana.'}), 500
 
-    # Find most recent mp3 file
-    files = [f for f in os.listdir(DOWNLOAD_FOLDER) if f.lower().endswith('.mp3')]
+    files = [f for f in os.listdir(DOWNLOAD_FOLDER) if f.lower().endswith(('.m4a', '.mp4'))]
     if not files:
-        log("❌ No MP3 files found after scdl download.")
-        return jsonify({'status': 'error', 'message': 'No MP3 file found after download.'}), 500
-    files = sorted(files, key=lambda f: os.path.getmtime(os.path.join(DOWNLOAD_FOLDER, f)), reverse=True)
-    latest_file = files[0]
+        log("❌ No downloadable files found after Manzana run.")
+        return jsonify({'status': 'error', 'message': 'No files found after download.'}), 500
+    latest_file = sorted(files, key=lambda f: os.path.getmtime(os.path.join(DOWNLOAD_FOLDER, f)), reverse=True)[0]
 
     return jsonify({
         'status': 'success',
-        'title': sanitize_filename(latest_file.replace('.mp3', '')),
+        'title': sanitize_filename(latest_file.rsplit('.', 1)[0]),
         'file_url': f"/download-file/{latest_file}",
         'stream_url': f"/stream-file/{latest_file}"
     })
-
 
 @app.route('/download-file/<path:filename>')
 def download_file(filename):
