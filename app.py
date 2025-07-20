@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify, Response, send_from_
 import os, re, time, subprocess, shutil
 from spotipy.oauth2 import SpotifyClientCredentials
 import spotipy
-from musicdl.musicdl import MusicDL
+
 
 app = Flask(__name__)
 LOGS = []
@@ -21,27 +21,35 @@ def sanitize_filename(name):
     return re.sub(r'[\\/:"*?<>|]+', '-', name)
 
 def download_song(query, output_dir):
-    log(f"🎧 Using MusicDL to search and download: {query}")
+    log(f"🎧 Using MusicDL CLI to search and download: {query}")
 
-    config = {
-        'logfilepath': 'musicdl.log',
-        'savedir': output_dir,
-        'search_size_per_source': 5,
-        'proxies': {}
-    }
-    target_sources = [
-        'kugou', 'kuwo', 'qqmusic', 'qianqian', 'fivesing',
-        'netease', 'migu', 'joox', 'yiting'
+    cli_cmd = [
+        'musicdl',
+        '-s', query,
+        '--savedir', output_dir,
+        '--logfilepath', os.path.join(output_dir, 'musicdl.log'),
+        '--search_size_per_source', '5',
     ]
+    
+    log(f"⚙️ Running: {' '.join(cli_cmd)}")
 
     try:
-        # Correct usage
-        client = MusicDL(config=config)
-        client.run(target_sources, [query])
-        log("✅ MusicDL download completed.")
-        return True
+        proc = subprocess.run(
+            cli_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=180
+        )
+        log(proc.stdout.strip())
+        if proc.returncode == 0:
+            log("✅ MusicDL download completed.")
+            return True
+        else:
+            log(f"❌ MusicDL CLI error: {proc.stderr.strip()}")
+            return None
     except Exception as e:
-        log(f"❌ MusicDL failed: {e}")
+        log(f"❌ MusicDL subprocess error: {e}")
         return None
 
 
