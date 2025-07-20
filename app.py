@@ -19,20 +19,43 @@ def log(msg):
 def sanitize_filename(name):
     return re.sub(r'[\\/:"*?<>|]+', '-', name)
 
-def scdl_download_by_search(query, output_dir):
-    if shutil.which("scdl") is None:
-        log("❌ scdl CLI not found. Install it by running: pip install scdl")
+def download_song(query, output_dir):
+    filename_pattern = os.path.join(output_dir, "%(title)s.%(ext)s")
+
+    # Try scdl first
+    if shutil.which("scdl"):
+        scdl_cmd = ["scdl", "-s", query, "--path", output_dir, "--onlymp3"]
+        try:
+            log(f"🎧 Trying scdl for: {query}")
+            completed = subprocess.run(scdl_cmd, capture_output=True, text=True, check=True)
+            log(f"📥 scdl output: {completed.stdout}")
+            log("✅ scdl download completed")
+            return True
+        except subprocess.CalledProcessError as e:
+            log(f"⚠️ scdl failed: {e.stderr.strip()}")
+
+    # Fallback to yt-dlp
+    if shutil.which("yt-dlp") is None:
+        log("❌ yt-dlp not found. Install it via: pip install yt-dlp")
         return None
-    cmd = ["scdl", "-s", query, "--path", output_dir, "--onlymp3"]
+
+    ytdlp_cmd = [
+        "yt-dlp",
+        f"ytsearch1:{query}",
+        "--extract-audio",
+        "--audio-format", "mp3",
+        "-o", filename_pattern
+    ]
     try:
-        log(f"🎧 Running scdl search and download for: {query}")
-        completed = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        log(f"📥 scdl output: {completed.stdout}")
-        log("✅ scdl download completed")
+        log(f"🎧 Falling back to yt-dlp for: {query}")
+        completed = subprocess.run(ytdlp_cmd, capture_output=True, text=True, check=True)
+        log(f"📥 yt-dlp output: {completed.stdout}")
+        log("✅ yt-dlp download completed")
         return True
     except subprocess.CalledProcessError as e:
-        log(f"❌ scdl download failed: {e.stderr}")
+        log(f"❌ yt-dlp download failed: {e.stderr.strip()}")
         return None
+
 
 # Spotify API (for search, not downloading)
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
@@ -87,7 +110,7 @@ def download():
         return jsonify({'status': 'error', 'message': 'Invalid Spotify URL or API error'}), 400
 
     # Download using scdl with refined search
-    success = scdl_download_by_search(search_query, DOWNLOAD_FOLDER)
+    success = download_song(search_query, DOWNLOAD_FOLDER)
     if not success:
         return jsonify({'status': 'error', 'message': 'Download failed or scdl not installed.'}), 500
 
