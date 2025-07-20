@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify, Response, send_file, send_from_directory
 from spotipy.oauth2 import SpotifyClientCredentials
-import spotipy, os, re, time, subprocess
+import spotipy, os, re, time
 from io import BytesIO
 from yt_dlp import YoutubeDL
 
@@ -8,6 +8,7 @@ app = Flask(__name__)
 LOGS = []
 DOWNLOAD_FOLDER = "static"
 
+# Create download folder if not exists
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 def log(msg):
@@ -19,7 +20,7 @@ def log(msg):
 def sanitize_filename(name):
     return re.sub(r'[\\/:"*?<>|]+', '-', name)
 
-# Spotify API
+# Spotify API auth
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
     client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET")
@@ -82,23 +83,6 @@ def download_mp3_to_memory(yt_url):
         log(f"❌ MP3 download failed: {str(e)}")
         return None
 
-def download_via_tor(yt_url, filename):
-    try:
-        log("🧅 Falling back to Tor...")
-        filepath = os.path.join(DOWNLOAD_FOLDER, filename)
-        result = subprocess.run(
-            ['torsocks', 'yt-dlp', '-f', 'bestaudio', '-x', '--audio-format', 'mp3',
-             '-o', filepath, yt_url],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
-        log(result.stdout)
-        if result.returncode != 0:
-            log(f"❌ Tor download error: {result.stderr}")
-            return False
-        return os.path.exists(filepath)
-    except Exception as e:
-        log(f"❌ Exception in Tor download: {str(e)}")
-        return False
 
 @app.route('/')
 def index():
@@ -164,18 +148,17 @@ def download():
             filename = sanitize_filename(raw_title) + ".mp3"
             file_path = os.path.join(DOWNLOAD_FOLDER, filename)
 
-        # fallback via torsocks if not downloaded
-        if not os.path.exists(file_path):
-            log("⚠️ Normal download failed. Trying Tor fallback...")
-            if not download_via_tor(yt_url, filename):
-                return jsonify({'status': 'error', 'message': 'Download failed via Tor and regular methods.'}), 500
-
-        return jsonify({
-            'status': 'success',
-            'title': filename.replace(".mp3", ""),
-            'file_url': f"/download-file/{filename}",
-            'stream_url': f"/stream-file/{filename}"
-        })
+            if os.path.exists(file_path):
+                # ✅ Return both stream and download links
+                return jsonify({
+                    'status': 'success',
+                    'title': raw_title,
+                    'file_url': f"/download-file/{filename}",
+                    'stream_url': f"/stream-file/{filename}"
+                })
+            else:
+                log("❌ File not found after download.")
+                return jsonify({'status': 'error', 'message': 'File not found after download'}), 500
 
     except Exception as e:
         log(f"❌ Error during download: {str(e)}")
