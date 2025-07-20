@@ -28,9 +28,8 @@ def download_song(query, output_dir):
         '-s', query,
         '--savedir', output_dir,
         '--logfilepath', os.path.join(output_dir, 'musicdl.log'),
-        '--search_size_per_source', '5',
     ]
-    
+
     log(f"⚙️ Running: {' '.join(cli_cmd)}")
 
     try:
@@ -51,6 +50,7 @@ def download_song(query, output_dir):
     except Exception as e:
         log(f"❌ MusicDL subprocess error: {e}")
         return None
+
 
 
 
