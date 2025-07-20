@@ -22,42 +22,28 @@ def sanitize_filename(name):
 
 def download_song(query, output_dir):
     log(f"🎧 Using MusicDL to search and download: {query}")
-    
+
     config = {
         'logfilepath': 'musicdl.log',
         'savedir': output_dir,
         'search_size_per_source': 5,
         'proxies': {}
     }
-    target_srcs = [
+    target_sources = [
         'kugou', 'kuwo', 'qqmusic', 'qianqian', 'fivesing',
-        'netease', 'migu', 'joox', 'yiting',
+        'netease', 'migu', 'joox', 'yiting'
     ]
+
     try:
-        client = musicdl.musicdl(config=config)
-        client.run(target_srcs, keywords=[query])
+        # Correct usage
+        client = musicdl.MusicDL(config=config)
+        client.run(target_sources, [query])
         log("✅ MusicDL download completed.")
         return True
     except Exception as e:
         log(f"❌ MusicDL failed: {e}")
         return None
 
-    ytdlp_cmd = [
-        "yt-dlp",
-        f"ytsearch1:{query}",
-        "--extract-audio",
-        "--audio-format", "mp3",
-        "-o", filename_pattern
-    ]
-    try:
-        log(f"🎧 Falling back to yt-dlp for: {query}")
-        completed = subprocess.run(ytdlp_cmd, capture_output=True, text=True, check=True)
-        log(f"📥 yt-dlp output: {completed.stdout}")
-        log("✅ yt-dlp download completed")
-        return True
-    except subprocess.CalledProcessError as e:
-        log(f"❌ yt-dlp download failed: {e.stderr.strip()}")
-        return None
 
 
 # Spotify API (for search, not downloading)
