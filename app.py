@@ -1,12 +1,14 @@
-from flask import Flask, render_template, request, jsonify, Response, send_from_directory
-import os, re, time, subprocess
+from flask import Flask, render_template, request, jsonify, Response, send_file, send_from_directory
 from spotipy.oauth2 import SpotifyClientCredentials
-import spotipy
+import spotipy, os, re, time
+from io import BytesIO
+from yt_dlp import YoutubeDL
 
 app = Flask(__name__)
 LOGS = []
 DOWNLOAD_FOLDER = "static"
 
+# Create download folder if not exists
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 def log(msg):
@@ -18,44 +20,69 @@ def log(msg):
 def sanitize_filename(name):
     return re.sub(r'[\\/:"*?<>|]+', '-', name)
 
-# Helper to call SDMUSIC to download first search result
-def download_song_sdmusic(query, output_dir, platform="qq"):
-    log(f"🎧 Using SDMUSIC to search and download: {query} (platform: {platform})")
-    # 1. Search (optional, but SDMUSIC requires search to determine -i for most accurate downloads)
-    # 2. Download first result
-    cli_cmd = [
-        "sdmusic",
-        "-n", query,
-        "-p", platform,
-        "-d",   # download mode
-        "-i", "1", # always pick the first result (user could customize!)
-        "-o", output_dir
-    ]
-    log(f"⚙️ Running: {' '.join(cli_cmd)}")
-    try:
-        proc = subprocess.run(
-            cli_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=180
-        )
-        log(proc.stdout.strip())
-        if proc.returncode == 0:
-            log("✅ SDMUSIC download completed.")
-            return True
-        else:
-            log(f"❌ SDMUSIC CLI error: {proc.stderr.strip()}")
-            return None
-    except Exception as e:
-        log(f"❌ SDMUSIC subprocess error: {e}")
-        return None
-
-# Spotify API setup (used for search only)
+# Spotify API auth
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
     client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET")
 ))
+
+def get_youtube_url_from_spotify(url):
+    try:
+        track_id = url.split("/")[-1].split("?")[0]
+        track = sp.track(track_id)
+        artist = track['artists'][0]['name']
+        title = track['name']
+        query = f"{artist} - {title} audio"
+        log(f"🔍 Searching YouTube for: {query}")
+        ydl_opts = {
+            'quiet': True,
+            'format': 'bestaudio/best',
+            'noplaylist': True,
+            'cookiefile': 'cookies.txt',
+        }
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"ytsearch1:{query}", download=False)
+            return info['entries'][0]['webpage_url']
+    except Exception as e:
+        log(f"❌ YouTube search failed: {str(e)}")
+        return None
+
+def download_mp3_to_memory(yt_url):
+    try:
+        log(f"🎧 Downloading: {yt_url}")
+        buffer = BytesIO()
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'cookiefile': 'cookies.txt',
+            'outtmpl': '%(title)s.%(ext)s',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': True,
+            'noplaylist': True,
+            'logtostderr': False,
+            'progress_hooks': [lambda d: log(f"📦 {d['status']}: {d.get('filename', '')}")],
+        }
+
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(yt_url, download=False)
+            ydl.download([yt_url])
+            mp3_filename = f"{info['title']}.mp3"
+            if os.path.exists(mp3_filename):
+                with open(mp3_filename, 'rb') as f:
+                    buffer.write(f.read())
+                os.remove(mp3_filename)
+                buffer.seek(0)
+                return buffer
+            else:
+                log("❌ Expected MP3 file not found.")
+        return None
+    except Exception as e:
+        log(f"❌ MP3 download failed: {str(e)}")
+        return None
+
 
 @app.route('/')
 def index():
@@ -70,9 +97,10 @@ def search():
     query = request.form.get('query')
     if not query:
         return jsonify({'status': 'error', 'message': 'No query provided'}), 400
-    log(f"🔎 Searching Spotify for: {query}")
+
+    log(f"🔎 Searching for: {query}")
     try:
-        results = sp.search(q=query, limit=4, type='track')
+        results = sp.search(q=query, limit=3, type='track')
         items = results['tracks']['items']
         if not items:
             return jsonify({'status': 'error', 'message': 'No results found.'})
@@ -84,46 +112,57 @@ def search():
 
         return jsonify({'status': 'success', 'choices': choices})
     except Exception as e:
-        log(f"🔥 Spotify search error: {str(e)}")
+        log(f"🔥 Error during search: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/download', methods=['POST'])
 def download():
-    spotify_url = request.form.get('url')
-    if not spotify_url:
-        return jsonify({'status': 'error', 'message': 'No Spotify track URL provided'}), 400
+    url = request.form.get('url')
+    if not url:
+        return jsonify({'status': 'error', 'message': 'No track URL provided'}), 400
 
-    # Extract Spotify track info to form the search query
+    yt_url = get_youtube_url_from_spotify(url)
+    if not yt_url:
+        return jsonify({'status': 'error', 'message': 'Could not find YouTube URL.'})
+
     try:
-        track_id = spotify_url.split("/")[-1].split("?")[0]
-        track_info = sp.track(track_id)
-        artist_name = track_info['artists'][0]['name']
-        track_name = track_info['name']
-        search_query = f"{artist_name} - {track_name}"
-        log(f"🎼 Resolved track info: {search_query}")
+        log(f"🎧 Downloading: {yt_url}")
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'cookiefile': 'cookies.txt',
+            'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': True,
+            'noplaylist': True,
+            'logtostderr': False,
+            'progress_hooks': [lambda d: log(f"📦 {d['status']}: {d.get('filename', '')}")],
+        }
+
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(yt_url, download=True)
+            raw_title = info['title']
+            filename = sanitize_filename(raw_title) + ".mp3"
+            file_path = os.path.join(DOWNLOAD_FOLDER, filename)
+
+            if os.path.exists(file_path):
+                # ✅ Return both stream and download links
+                return jsonify({
+                    'status': 'success',
+                    'title': raw_title,
+                    'file_url': f"/download-file/{filename}",
+                    'stream_url': f"/stream-file/{filename}"
+                })
+            else:
+                log("❌ File not found after download.")
+                return jsonify({'status': 'error', 'message': 'File not found after download'}), 500
+
     except Exception as e:
-        log(f"❌ Failed to resolve Spotify track info: {e}")
-        return jsonify({'status': 'error', 'message': 'Invalid Spotify URL or API error'}), 400
-
-    # Download with SDMUSIC (from QQ music by default)
-    success = download_song_sdmusic(search_query, DOWNLOAD_FOLDER, platform="qq")
-    if not success:
-        return jsonify({'status': 'error', 'message': 'Download failed or SDMUSIC not installed.'}), 500
-
-    # Find latest mp3/flac file
-    files = [f for f in os.listdir(DOWNLOAD_FOLDER) if f.lower().endswith(('.mp3', '.flac'))]
-    if not files:
-        log("❌ No audio file found after SDMUSIC download.")
-        return jsonify({'status': 'error', 'message': 'No file found after download.'}), 500
-    files.sort(key=lambda f: os.path.getmtime(os.path.join(DOWNLOAD_FOLDER, f)), reverse=True)
-    latest_file = files[0]
-
-    return jsonify({
-        'status': 'success',
-        'title': sanitize_filename(latest_file.rsplit('.', 1)[0]),
-        'file_url': f"/download-file/{latest_file}",
-        'stream_url': f"/stream-file/{latest_file}"
-    })
+        log(f"❌ Error during download: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/download-file/<path:filename>')
 def download_file(filename):
@@ -132,6 +171,22 @@ def download_file(filename):
 @app.route('/stream-file/<path:filename>')
 def stream_file(filename):
     return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=False)
+
+@app.route('/stream', methods=['POST'])
+def stream():
+    url = request.form.get('url')
+    if not url:
+        return jsonify({'status': 'error', 'message': 'No track URL provided'}), 400
+
+    yt_url = get_youtube_url_from_spotify(url)
+    if not yt_url:
+        return jsonify({'status': 'error', 'message': 'Could not find YouTube URL.'})
+
+    mp3_data = download_mp3_to_memory(yt_url)
+    if mp3_data:
+        return send_file(mp3_data, mimetype="audio/mpeg", as_attachment=False)
+    else:
+        return jsonify({'status': 'error', 'message': 'MP3 not streamable'}), 500
 
 @app.route('/progress-stream')
 def progress_stream():
@@ -148,4 +203,5 @@ def progress_stream():
 
 if __name__ == '__main__':
     log("🚀 Flask App Initialized")
+    log("✅ Spotify client authenticated successfully")
     app.run(host="0.0.0.0", port=5000, debug=True)
