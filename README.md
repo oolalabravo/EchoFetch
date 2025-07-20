@@ -1,4 +1,3 @@
-# CURRENLY NOT WORKING!
 
 # 🎵 Spotify Downloader — **EchoFetch**
 
