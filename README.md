@@ -1,3 +1,5 @@
+# CURRENLY NOT WORKING!
+
 # 🎵 Spotify Downloader — **EchoFetch**
 
 A **modern, enterprise-class Spotify downloader** web application built with **Flask**, **Spotipy**, **Tailwind CSS**, and **GSAP**. Search and download songs instantly with a beautiful, animated, mobile-friendly UI.
