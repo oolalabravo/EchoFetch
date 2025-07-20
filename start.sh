@@ -5,6 +5,9 @@ set -e
 
 # Step 1: Install dependencies
 echo "[*] Installing dependencies..."
+apt-get update
+apt-get install -y tor ffmpeg
+
 apt update
 apt install -y  ffmpeg  python3-pip
 
