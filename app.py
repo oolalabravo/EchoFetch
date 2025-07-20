@@ -4,11 +4,38 @@ import spotipy, os, re, time
 from io import BytesIO
 from yt_dlp import YoutubeDL
 
+# --- Add: Tor launcher with stem ---
+import stem.process
+import re as regex
+import sys
+
+SOCKS_PORT = 9050
+
+if os.name == 'nt':
+    TOR_PATH = os.path.join(os.getcwd(), "tor", "tor.exe")
+else:
+    TOR_PATH = "tor"  # system-installed tor for Linux/Railway
+
+def print_bootstrap(line):
+    if regex.search('Bootstrapped', line):
+        print("[Tor]", line)
+
+try:
+    tor_process = stem.process.launch_tor_with_config(
+        config={'SocksPort': str(SOCKS_PORT)},
+        init_msg_handler=print_bootstrap,
+        tor_cmd=TOR_PATH
+    )
+    print(f"[TOR] Tor launched on port {SOCKS_PORT} (pid: {tor_process.pid})")
+except Exception as e:
+    print(f"[TOR] Failed to launch Tor: {e}")
+    sys.exit(1)
+# --- End Tor launcher ---
+
 app = Flask(__name__)
 LOGS = []
 DOWNLOAD_FOLDER = "static"
 
-# Create download folder if not exists
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 def log(msg):
@@ -26,6 +53,14 @@ sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET")
 ))
 
+# --- Add: Helper so all yt-dlp goes through Tor ---
+def get_yt_dlp_opts(base_opts):
+    opts = dict(base_opts)
+    opts['proxy'] = f'socks5://127.0.0.1:{SOCKS_PORT}'
+    opts.pop('cookiefile', None)  # optional: Tor doesn't need cookies
+    return opts
+# ---
+
 def get_youtube_url_from_spotify(url):
     try:
         track_id = url.split("/")[-1].split("?")[0]
@@ -40,7 +75,7 @@ def get_youtube_url_from_spotify(url):
             'noplaylist': True,
             'cookiefile': 'cookies.txt',
         }
-        with YoutubeDL(ydl_opts) as ydl:
+        with YoutubeDL(get_yt_dlp_opts(ydl_opts)) as ydl:
             info = ydl.extract_info(f"ytsearch1:{query}", download=False)
             return info['entries'][0]['webpage_url']
     except Exception as e:
@@ -66,7 +101,7 @@ def download_mp3_to_memory(yt_url):
             'progress_hooks': [lambda d: log(f"📦 {d['status']}: {d.get('filename', '')}")],
         }
 
-        with YoutubeDL(ydl_opts) as ydl:
+        with YoutubeDL(get_yt_dlp_opts(ydl_opts)) as ydl:
             info = ydl.extract_info(yt_url, download=False)
             ydl.download([yt_url])
             mp3_filename = f"{info['title']}.mp3"
@@ -82,7 +117,6 @@ def download_mp3_to_memory(yt_url):
     except Exception as e:
         log(f"❌ MP3 download failed: {str(e)}")
         return None
-
 
 @app.route('/')
 def index():
@@ -142,7 +176,7 @@ def download():
             'progress_hooks': [lambda d: log(f"📦 {d['status']}: {d.get('filename', '')}")],
         }
 
-        with YoutubeDL(ydl_opts) as ydl:
+        with YoutubeDL(get_yt_dlp_opts(ydl_opts)) as ydl:
             info = ydl.extract_info(yt_url, download=True)
             raw_title = info['title']
             filename = sanitize_filename(raw_title) + ".mp3"
@@ -202,6 +236,7 @@ def progress_stream():
     return Response(event_stream(), content_type='text/event-stream')
 
 if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))  # For Railway compatibility
     log("🚀 Flask App Initialized")
     log("✅ Spotify client authenticated successfully")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=True)
