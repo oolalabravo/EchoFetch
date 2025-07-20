@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify, Response, send_from_
 import os, re, time, subprocess, shutil
 from spotipy.oauth2 import SpotifyClientCredentials
 import spotipy
-from musicdl import musicdl
+from musicdl.musicdl import MusicDL
 
 app = Flask(__name__)
 LOGS = []
@@ -36,7 +36,7 @@ def download_song(query, output_dir):
 
     try:
         # Correct usage
-        client = musicdl.MusicDL(config=config)
+        client = MusicDL(config=config)
         client.run(target_sources, [query])
         log("✅ MusicDL download completed.")
         return True
