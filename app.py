@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, Response, send_from_directory
-import os, re, time, subprocess, shutil
+import os, re, time, subprocess
 from spotipy.oauth2 import SpotifyClientCredentials
 import spotipy
 
@@ -7,33 +7,31 @@ app = Flask(__name__)
 LOGS = []
 DOWNLOAD_FOLDER = "static"
 
-# Create download folder if it doesn't exist
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# Logging helper
 def log(msg):
     print(msg)
     LOGS.append(msg)
     if len(LOGS) > 100:
         LOGS.pop(0)
 
-# File name sanitizer
 def sanitize_filename(name):
     return re.sub(r'[\\/:"*?<>|]+', '-', name)
 
-# Download song using MusicDL CLI
-def download_song(query, output_dir):
-    log(f"🎧 Using MusicDL CLI to search and download: {query}")
-
+# Helper to call SDMUSIC to download first search result
+def download_song_sdmusic(query, output_dir, platform="qq"):
+    log(f"🎧 Using SDMUSIC to search and download: {query} (platform: {platform})")
+    # 1. Search (optional, but SDMUSIC requires search to determine -i for most accurate downloads)
+    # 2. Download first result
     cli_cmd = [
-        'musicdl',
-        '-s', query,
-        '--savedir', output_dir,
-        '--logfilepath', os.path.join(output_dir, 'musicdl.log'),
+        "sdmusic",
+        "-n", query,
+        "-p", platform,
+        "-d",   # download mode
+        "-i", "1", # always pick the first result (user could customize!)
+        "-o", output_dir
     ]
-
     log(f"⚙️ Running: {' '.join(cli_cmd)}")
-
     try:
         proc = subprocess.run(
             cli_cmd,
@@ -44,22 +42,21 @@ def download_song(query, output_dir):
         )
         log(proc.stdout.strip())
         if proc.returncode == 0:
-            log("✅ MusicDL download completed.")
+            log("✅ SDMUSIC download completed.")
             return True
         else:
-            log(f"❌ MusicDL CLI error: {proc.stderr.strip()}")
+            log(f"❌ SDMUSIC CLI error: {proc.stderr.strip()}")
             return None
     except Exception as e:
-        log(f"❌ MusicDL subprocess error: {e}")
+        log(f"❌ SDMUSIC subprocess error: {e}")
         return None
 
-# Spotify API setup
+# Spotify API setup (used for search only)
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
     client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET")
 ))
 
-# Web routes
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -73,7 +70,6 @@ def search():
     query = request.form.get('query')
     if not query:
         return jsonify({'status': 'error', 'message': 'No query provided'}), 400
-
     log(f"🔎 Searching Spotify for: {query}")
     try:
         results = sp.search(q=query, limit=4, type='track')
@@ -97,7 +93,7 @@ def download():
     if not spotify_url:
         return jsonify({'status': 'error', 'message': 'No Spotify track URL provided'}), 400
 
-    # Extract track info
+    # Extract Spotify track info to form the search query
     try:
         track_id = spotify_url.split("/")[-1].split("?")[0]
         track_info = sp.track(track_id)
@@ -109,23 +105,22 @@ def download():
         log(f"❌ Failed to resolve Spotify track info: {e}")
         return jsonify({'status': 'error', 'message': 'Invalid Spotify URL or API error'}), 400
 
-    # Start download
-    success = download_song(search_query, DOWNLOAD_FOLDER)
+    # Download with SDMUSIC (from QQ music by default)
+    success = download_song_sdmusic(search_query, DOWNLOAD_FOLDER, platform="qq")
     if not success:
-        return jsonify({'status': 'error', 'message': 'Download failed or MusicDL not installed.'}), 500
+        return jsonify({'status': 'error', 'message': 'Download failed or SDMUSIC not installed.'}), 500
 
-    # Find latest MP3
-    files = [f for f in os.listdir(DOWNLOAD_FOLDER) if f.lower().endswith('.mp3')]
+    # Find latest mp3/flac file
+    files = [f for f in os.listdir(DOWNLOAD_FOLDER) if f.lower().endswith(('.mp3', '.flac'))]
     if not files:
-        log("❌ No MP3 files found after MusicDL download.")
-        return jsonify({'status': 'error', 'message': 'No MP3 file found after download.'}), 500
-
+        log("❌ No audio file found after SDMUSIC download.")
+        return jsonify({'status': 'error', 'message': 'No file found after download.'}), 500
     files.sort(key=lambda f: os.path.getmtime(os.path.join(DOWNLOAD_FOLDER, f)), reverse=True)
     latest_file = files[0]
 
     return jsonify({
         'status': 'success',
-        'title': sanitize_filename(latest_file.replace('.mp3', '')),
+        'title': sanitize_filename(latest_file.rsplit('.', 1)[0]),
         'file_url': f"/download-file/{latest_file}",
         'stream_url': f"/stream-file/{latest_file}"
     })
