@@ -70,16 +70,28 @@ def search():
 
 @app.route('/download', methods=['POST'])
 def download():
-    display_query = request.form.get('query') or request.form.get('url')
-    if not display_query:
-        return jsonify({'status': 'error', 'message': 'No song name provided'}), 400
+    spotify_url = request.form.get('url')
+    if not spotify_url:
+        return jsonify({'status': 'error', 'message': 'No Spotify track URL provided'}), 400
 
-    # Use scdl's built-in search to download best match
-    success = scdl_download_by_search(display_query, DOWNLOAD_FOLDER)
+    # Extract track info from Spotify
+    try:
+        track_id = spotify_url.split("/")[-1].split("?")[0]
+        track_info = sp.track(track_id)
+        artist_name = track_info['artists'][0]['name']
+        track_name = track_info['name']
+        search_query = f"{artist_name} - {track_name}"
+        log(f"🎼 Resolved track info: {search_query}")
+    except Exception as e:
+        log(f"❌ Failed to resolve Spotify track info: {e}")
+        return jsonify({'status': 'error', 'message': 'Invalid Spotify URL or API error'}), 400
+
+    # Download using scdl with refined search
+    success = scdl_download_by_search(search_query, DOWNLOAD_FOLDER)
     if not success:
         return jsonify({'status': 'error', 'message': 'Download failed or scdl not installed.'}), 500
 
-    # Find most recent mp3 file in the DOWNLOAD_FOLDER
+    # Find most recent mp3 file
     files = [f for f in os.listdir(DOWNLOAD_FOLDER) if f.lower().endswith('.mp3')]
     if not files:
         log("❌ No MP3 files found after scdl download.")
@@ -93,6 +105,7 @@ def download():
         'file_url': f"/download-file/{latest_file}",
         'stream_url': f"/stream-file/{latest_file}"
     })
+
 
 @app.route('/download-file/<path:filename>')
 def download_file(filename):
