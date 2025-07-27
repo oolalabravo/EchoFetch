@@ -8,7 +8,7 @@ import io
 import requests
 
 app = Flask(__name__)
-CLIENT_ID = "CCbVVppXByCBrh4OcGmbrgyYhni0SgvL"
+CLIENT_ID = "CLIENT_ID"
 
 INDEX_HTML = """
 <!doctype html>
