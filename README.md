@@ -1,45 +1,42 @@
 
-# 🎵 Spotify Downloader — **EchoFetch**
 
-A **modern, enterprise-class Spotify downloader** web application built with **Flask**, **Spotipy**, **Tailwind CSS**, and **GSAP**. Search and download songs instantly with a beautiful, animated, mobile-friendly UI.
+# 🎵 SoundCloud Downloader -EcoFetch
 
-> 🔒 Powered by Spotify’s official public API using [Spotipy](https://spotipy.readthedocs.io/)  
-> ✨ Sleek, animated interface with [GSAP](https://greensock.com/gsap/) and [TailwindCSS](https://tailwindcss.com/)  
-> ⚡ Fast Python Flask backend  
-> 📁 Local download management  
-> 🚀 100% open source — contribute, build, remix!
+A sleek, minimal Flask web application to search and download top tracks from SoundCloud using a client ID and `scdl`. Supports streaming 3 top search results and downloading the selected song directly to your device.
 
-## 🌟 Live Preview
 
-_Hosted on Railway_ https://echofetch-production.up.railway.app/
+---
 
 ## 🚀 Features
 
-- ✅ Spotify API track search  
-- ✅ Download by ID or full URL  
-- ✅ Ultra-smooth, non-boring GSAP UI animations  
-- ✅ Mobile-first responsive layout  
-- ✅ Real-time logging via Flask backend  
-- ✅ User-friendly error and progress feedback  
-- ✅ Quick audio streaming & downloading
+* 🔍 Search any song on SoundCloud.
+* 🎶 Displays top 3 matching tracks with artist names.
+* 📥 Download selected song directly from browser.
+* 🎨 Clean, modern, responsive UI using HTML + CSS.
+* ⚙️ Backend powered by Flask and SoundCloud API v2.
+* 🐚 Uses `scdl` CLI to download the song locally in memory.
 
-## 🛠️ Tech Stack
+---
 
-| Tech        | Usage                                 |
-|-------------|---------------------------------------|
-| Flask       | Backend Python web server             |
-| Spotipy     | Spotify Web API (client credentials)  |
-| GSAP        | Frontend UI animations                |
-| TailwindCSS | Rapid frontend styling                |
-| HTML/JS     | UI logic & user events                |
+## 🛠️ Requirements
 
-## 🔐 Setup & Installation
+Make sure you have the following installed:
+
+* Python 3.7+
+* pip
+* `scdl` (SoundCloud downloader CLI tool)
+* `ffmpeg` (for some formats)
+* A valid SoundCloud **Client ID**
+
+---
+
+## 📦 Installation
 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/oolalabravo/EchoFetch.git
-cd EchoFetch
+git clone https://github.com/oolalabravo/EcoFetch.git
+cd soundcloud-downloader-flask
 ```
 
 ### 2. Install dependencies
@@ -48,67 +45,124 @@ cd EchoFetch
 pip install -r requirements.txt
 ```
 
-### 3. Configure your Spotify secrets
+---
 
-Create a `.env` file in your root folder, or set these as environment variables:
+## 🔐 Environment Setup
 
-```ini
-SPOTIPY_CLIENT_ID=your_client_id
-SPOTIPY_CLIENT_SECRET=your_client_secret
+### Set your SoundCloud Client ID
+
+This app uses the SoundCloud API v2, which requires a `client_id`.
+
+#### 1. Get your Client ID:
+
+* Visit [https://soundcloud.com/](https://soundcloud.com/)
+* Log in → Open browser dev tools → Network tab → Search something.
+* Look for a request to `api-v2.soundcloud.com` and find `client_id=...`.
+
+#### 2. Set it in the code:
+
+In your Python file (top of the script), replace:
+
+```python
+CLIENT_ID = "CLIENT_ID"
 ```
 
-> ⚠️ **Do not put quotes around secrets!** Save secrets as they appear, treat them carefully.
+with:
 
-### 4. (Optional) Ensure [spotdl](https://spotdl.io) and `ffmpeg` are installed and available in your system PATH for music downloading & conversion.
+```python
+CLIENT_ID = "your_actual_client_id"
+```
 
-## 🔧 Running the App
+> Alternatively, store it in an `.env` file and read with `python-dotenv`.
+
+---
+
+## ▶️ Run the App
 
 ```bash
 python app.py
 ```
 
-Visit [http://127.0.0.1:5000/](http://127.0.0.1:5000/) in your browser.
+Or if running in a Railway/Heroku environment:
 
-You should now see your elegant Spotify downloader, with live GSAP transitions and responsive UI.
+```bash
+PORT=5000 python app.py
+```
 
-## 🪲 Troubleshooting
+Now open your browser and go to:
 
-| Problem                    | Solution                                                |
-|----------------------------|--------------------------------------------------------|
-| `invalid_client` error     | Double-check your client secret, and ensure no quotes. |
-| Song won't download        | Check your network & spotdl/ffmpeg installation.        |
-| UI not animating           | Ensure Tailwind CDN & GSAP links are correct.           |
+```
+http://127.0.0.1:5000
+```
 
-## 🏷️ Tags
+---
 
-`spotify` `downloader` `flask` `python` `tailwind` `gsap` `webapp` `music` `spotipy` `animation` `open-source`
+## 🖼️ Usage
 
-## 📄 License
+1. Enter the name of a song in the input box.
+2. View the top 3 results with artist names.
+3. Select one and click **"Stream Selected Song"**.
+4. Your song will be streamed and downloaded instantly.
 
-Licensed under the [MIT License](./LICENSE).
+---
 
-## 🙌 Acknowledgments
+## 🌐 Deployment Tips
 
-- [Spotipy Documentation](https://spotipy.readthedocs.io/)
-- [GSAP Animations](https://greensock.com/gsap/)
-- [TailwindCSS](https://tailwindcss.com/)
-- [spotdl - Spotify Downloader](https://spotdl.io)
+To deploy this app to **Railway**, **Heroku**, or **Render**:
 
-## 💡 Roadmap & Ideas
+* Make sure `scdl` is available in build commands.
+* Set `PORT` environment variable.
+* If needed, make a `Procfile` with:
 
-_EchoFetch is always evolving — your ideas help!_
+```
+web: python app.py
+```
 
-- ✅ Dark mode toggle
-- 🎨 Custom themes and color palettes
-- 📱 Enhanced mobile PWA features
-- ⚡ Advanced loading & status animations
-- 📊 Usage analytics dashboard
-- 🧠 AI-powered song recommendations (soon… 👀)
+* Set the `CLIENT_ID` as an environment variable or hardcode it if deploying privately.
 
-## 🤝 Contributing & Feedback
+---
 
-Whether you’re a developer, designer, or power user — PRs, issues, ideas, and improvements are warmly welcomed!  
-⭐ _If you like the project, star it and share your ideas!_
+## 🔍 Troubleshooting
 
-> Made with ❤️ by [Bhvaya Sharma](https://github.com/oolalabravo)  
-> [EchoFetch on GitHub](https://github.com/oolalabravo/EchoFetch)
+| Issue                 | Solution                                                                       |
+| --------------------- | ------------------------------------------------------------------------------ |
+| `scdl not found`      | Ensure it’s installed and added to PATH. Try `pip install scdl` again.         |
+| `No audio file found` | The track may not be downloadable or available in supported formats.           |
+| `403 Forbidden`       | Your client ID might be invalid or rate-limited. Rotate it or fetch a new one. |
+
+---
+
+## 📁 File Structure
+
+```
+├── app.py                # Main Flask app
+├── templates             # (HTML is rendered as string inline)
+├── static                # Where scdl saves downloaded songs temporarily
+├── requirements.txt      # Dependencies (Flask, requests)
+```
+
+---
+
+## 💡 Future Ideas
+
+* Add support for downloading playlists.
+* Use JavaScript frontend and API backend.
+* Add multiple quality/resolution options.
+* Deploy using Docker or fly.io for portability.
+
+---
+
+## ❤️ Credits
+
+* UI inspired by [Inter Font](https://rsms.me/inter/)
+* Powered by [SoundCloud API](https://developers.soundcloud.com/docs/api/guide)
+* Backend by Flask & `scdl` CLI
+
+---
+
+## 📜 License
+
+This project is open-source and licensed under the [MIT License](LICENSE).
+
+---
+
