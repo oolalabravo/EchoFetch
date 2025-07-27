@@ -1,207 +1,257 @@
-from flask import Flask, render_template, request, jsonify, Response, send_file, send_from_directory
-from spotipy.oauth2 import SpotifyClientCredentials
-import spotipy, os, re, time
-from io import BytesIO
-from yt_dlp import YoutubeDL
+from flask import Flask, request, render_template_string, send_file
+import subprocess
+import tempfile
+import shutil
+import glob
+import os
+import io
+import requests
 
 app = Flask(__name__)
-LOGS = []
-DOWNLOAD_FOLDER = "static"
+CLIENT_ID = "CCbVVppXByCBrh4OcGmbrgyYhni0SgvL"
 
-# Create download folder if not exists
-os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
-
-def log(msg):
-    print(msg)
-    LOGS.append(msg)
-    if len(LOGS) > 100:
-        LOGS.pop(0)
-
-def sanitize_filename(name):
-    return re.sub(r'[\\/:"*?<>|]+', '-', name)
-
-# Spotify API auth
-sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
-    client_id=os.environ.get("SPOTIFY_CLIENT_ID"),
-    client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET")
-))
-
-def get_youtube_url_from_spotify(url):
-    try:
-        track_id = url.split("/")[-1].split("?")[0]
-        track = sp.track(track_id)
-        artist = track['artists'][0]['name']
-        title = track['name']
-        query = f"{artist} - {title} audio"
-        log(f"🔍 Searching YouTube for: {query}")
-        ydl_opts = {
-            'quiet': True,
-            'format': 'bestaudio/best',
-            'noplaylist': True,
-            'cookiefile': 'cookies.txt',
-        }
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"ytsearch1:{query}", download=False)
-            return info['entries'][0]['webpage_url']
-    except Exception as e:
-        log(f"❌ YouTube search failed: {str(e)}")
-        return None
-
-def download_mp3_to_memory(yt_url):
-    try:
-        log(f"🎧 Downloading: {yt_url}")
-        buffer = BytesIO()
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'cookiefile': 'cookies.txt',
-            'outtmpl': '%(title)s.%(ext)s',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': True,
-            'noplaylist': True,
-            'logtostderr': False,
-            'progress_hooks': [lambda d: log(f"📦 {d['status']}: {d.get('filename', '')}")],
-        }
-
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(yt_url, download=False)
-            ydl.download([yt_url])
-            mp3_filename = f"{info['title']}.mp3"
-            if os.path.exists(mp3_filename):
-                with open(mp3_filename, 'rb') as f:
-                    buffer.write(f.read())
-                os.remove(mp3_filename)
-                buffer.seek(0)
-                return buffer
-            else:
-                log("❌ Expected MP3 file not found.")
-        return None
-    except Exception as e:
-        log(f"❌ MP3 download failed: {str(e)}")
-        return None
+INDEX_HTML = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SoundCloud Downloader</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #ff5500, #ff9966);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    h1 {
+      font-size: 3em;
+      font-weight: 800;
+      margin-bottom: 20px;
+    }
+    form {
+      background: rgba(0, 0, 0, 0.6);
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+    }
+    input[type="text"] {
+      padding: 12px;
+      font-size: 1.1em;
+      border: none;
+      border-radius: 8px;
+      width: 300px;
+      margin-right: 10px;
+    }
+    input[type="submit"] {
+      background: #fff;
+      color: #ff5500;
+      font-weight: 600;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    input[type="submit"]:hover {
+      background: #ffe6d5;
+    }
+  </style>
+</head>
+<body>
+  <h1>SoundCloud Downloader</h1>
+  <form method="post" action="/search">
+    <input type="text" name="song_name" placeholder="Enter song name" required>
+    <input type="submit" value="Search">
+  </form>
+</body>
+</html>
+"""
 
 
-@app.route('/')
+SEARCH_RESULTS_HTML = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Search Results</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #f8f8f8;
+      color: #333;
+      padding: 40px;
+    }
+    h1 {
+      color: #ff5500;
+      font-weight: 700;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      padding: 12px 15px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    th {
+      background-color: #ff5500;
+      color: white;
+    }
+    tr:hover {
+      background-color: #ffe6d5;
+    }
+    form {
+      max-width: 800px;
+      margin: auto;
+    }
+    input[type="submit"] {
+      margin-top: 20px;
+      background-color: #ff5500;
+      color: white;
+      font-weight: 600;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    input[type="submit"]:hover {
+      background-color: #e64a00;
+    }
+    .error {
+      color: red;
+      margin-bottom: 20px;
+    }
+    a {
+      display: inline-block;
+      margin-top: 30px;
+      text-decoration: none;
+      color: #ff5500;
+      font-weight: 600;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <h1>Search results for '{{ query }}'</h1>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/stream">
+    <table>
+      <tr><th>No.</th><th>Title</th><th>Artist</th><th>Select</th></tr>
+      {% for t in tracks %}
+      <tr>
+        <td>{{ t.no }}</td>
+        <td>{{ t.title }}</td>
+        <td>{{ t.artist }}</td>
+        <td><input type="radio" name="song_no" value="{{ t.no }}" required></td>
+      </tr>
+      {% endfor %}
+    </table>
+    <input type="hidden" name="query" value="{{ query }}">
+    <input type="submit" value="Stream Selected Song">
+  </form>
+  <a href="/">🔙 Search again</a>
+</body>
+</html>
+"""
+
+
+# Store song links in memory temporarily
+stored_links = {}
+
+def fetch(query):
+    url = f"https://api-v2.soundcloud.com/search/tracks?q={query}&client_id={CLIENT_ID}&limit=3"
+    res = requests.get(url)
+    if res.status_code != 200:
+        return None, f"Error: {res.status_code} {res.text}"
+
+    data = res.json()
+    tracks = []
+    links = []
+
+    for idx, track in enumerate(data.get("collection", []), start=1):
+        tracks.append({
+            'no': idx,
+            'title': track['title'],
+            'artist': track['user']['username'],
+            'url': track['permalink_url']
+        })
+        links.append(track['permalink_url'])
+
+    return tracks, links
+
+def download_song_to_memory(link):
+    scdl_path = shutil.which("scdl")
+    if not scdl_path:
+        return None, "❌ 'scdl' not found in PATH."
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        command = [scdl_path, "-l", link, "--path", tmpdir]
+        result = subprocess.run(command, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            return None, result.stderr
+
+        audio_files = []
+        for ext in ('*.mp3', '*.m4a', '*.flac', '*.wav'):
+            audio_files += glob.glob(os.path.join(tmpdir, ext))
+
+        if not audio_files:
+            return None, "⚠️ No audio file found."
+
+        filepath = audio_files[0]
+        with open(filepath, "rb") as f:
+            song_bytes = io.BytesIO(f.read())
+            song_bytes.seek(0)
+            return (song_bytes, os.path.basename(filepath)), "✅ Stream ready"
+
+@app.route("/")
 def index():
-    return render_template('index.html')
+    return INDEX_HTML
 
-@app.route('/logs')
-def logs():
-    return jsonify(LOGS)
-
-@app.route('/search', methods=['POST'])
+@app.route("/search", methods=["POST"])
 def search():
-    query = request.form.get('query')
+    query = request.form.get("song_name", "").strip()
     if not query:
-        return jsonify({'status': 'error', 'message': 'No query provided'}), 400
+        return render_template_string(SEARCH_RESULTS_HTML, query=query, tracks=[], error="Please enter a song name.")
 
-    log(f"🔎 Searching for: {query}")
-    try:
-        results = sp.search(q=query, limit=3, type='track')
-        items = results['tracks']['items']
-        if not items:
-            return jsonify({'status': 'error', 'message': 'No results found.'})
+    tracks, links = fetch(query)
+    if not tracks:
+        return render_template_string(SEARCH_RESULTS_HTML, query=query, tracks=[], error=links)
 
-        choices = [{
-            'name': f"{track['artists'][0]['name']} - {track['name']}",
-            'url': track['external_urls']['spotify']
-        } for track in items]
+    stored_links[query] = links
+    return render_template_string(SEARCH_RESULTS_HTML, query=query, tracks=tracks, error=None)
 
-        return jsonify({'status': 'success', 'choices': choices})
-    except Exception as e:
-        log(f"🔥 Error during search: {str(e)}")
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/download', methods=['POST'])
-def download():
-    url = request.form.get('url')
-    if not url:
-        return jsonify({'status': 'error', 'message': 'No track URL provided'}), 400
-
-    yt_url = get_youtube_url_from_spotify(url)
-    if not yt_url:
-        return jsonify({'status': 'error', 'message': 'Could not find YouTube URL.'})
-
-    try:
-        log(f"🎧 Downloading: {yt_url}")
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'cookiefile': 'cookies.txt',
-            'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': True,
-            'noplaylist': True,
-            'logtostderr': False,
-            'progress_hooks': [lambda d: log(f"📦 {d['status']}: {d.get('filename', '')}")],
-        }
-
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(yt_url, download=True)
-            raw_title = info['title']
-            filename = sanitize_filename(raw_title) + ".mp3"
-            file_path = os.path.join(DOWNLOAD_FOLDER, filename)
-
-            if os.path.exists(file_path):
-                # ✅ Return both stream and download links
-                return jsonify({
-                    'status': 'success',
-                    'title': raw_title,
-                    'file_url': f"/download-file/{filename}",
-                    'stream_url': f"/stream-file/{filename}"
-                })
-            else:
-                log("❌ File not found after download.")
-                return jsonify({'status': 'error', 'message': 'File not found after download'}), 500
-
-    except Exception as e:
-        log(f"❌ Error during download: {str(e)}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/download-file/<path:filename>')
-def download_file(filename):
-    return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=True)
-
-@app.route('/stream-file/<path:filename>')
-def stream_file(filename):
-    return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=False)
-
-@app.route('/stream', methods=['POST'])
+@app.route("/stream", methods=["POST"])
 def stream():
-    url = request.form.get('url')
-    if not url:
-        return jsonify({'status': 'error', 'message': 'No track URL provided'}), 400
+    query = request.form.get("query", "")
+    song_no = request.form.get("song_no")
 
-    yt_url = get_youtube_url_from_spotify(url)
-    if not yt_url:
-        return jsonify({'status': 'error', 'message': 'Could not find YouTube URL.'})
+    if query not in stored_links:
+        return "⚠️ Session expired or invalid query."
 
-    mp3_data = download_mp3_to_memory(yt_url)
-    if mp3_data:
-        return send_file(mp3_data, mimetype="audio/mpeg", as_attachment=False)
-    else:
-        return jsonify({'status': 'error', 'message': 'MP3 not streamable'}), 500
+    try:
+        song_idx = int(song_no) - 1
+        link = stored_links[query][song_idx]
+    except Exception:
+        return "⚠️ Invalid selection."
 
-@app.route('/progress-stream')
-def progress_stream():
-    def event_stream():
-        previous_logs = ""
-        while True:
-            current_logs = "\n".join(LOGS)
-            if current_logs != previous_logs:
-                new_line = current_logs.split("\n")[-1]
-                yield f"data: {new_line}\n\n"
-                previous_logs = current_logs
-            time.sleep(0.5)
-    return Response(event_stream(), content_type='text/event-stream')
+    result, msg = download_song_to_memory(link)
+    if result:
+        song_bytes, filename = result
+        return send_file(song_bytes, as_attachment=True, download_name=filename)
+    return f"❌ Error:\n{msg}", 500
 
-if __name__ == '__main__':
-    log("🚀 Flask App Initialized")
-    log("✅ Spotify client authenticated successfully")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+if __name__ == "__main__":
+    app.run(debug=True)
