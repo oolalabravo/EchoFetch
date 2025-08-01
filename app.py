@@ -11,10 +11,10 @@ import time
 from colorthief import ColorThief
 
 app = Flask(__name__)
-CLIENT_ID = "CCbVVppXByCBrh4OcGmbrgyYhni0SgvL"
+CLIENT_ID = "CLIENT_ID"
 
 # Initialize Genius client with increased timeout
-GENIUS_ACCESS_TOKEN = "N21RDzm7DG-uvVcrXggoBfZ18yj7r6snEjnhtrhTWZRM3u2xgs7fv-oQ5LunvaJq"
+GENIUS_ACCESS_TOKEN = "GENIUS_TOKEN"
 genius = lyricsgenius.Genius(GENIUS_ACCESS_TOKEN, timeout=15)
 genius.skip_non_songs = True
 genius.excluded_terms = ["(Remix)", "(Live)"]
@@ -592,7 +592,47 @@ PLAYER_HTML = '''
 </html>
 '''
 
-FORBIDDEN_HTML = ''' (UNCHANGED - use as in your post) '''
+FORBIDDEN_HTML = ''' <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>403 Forbidden</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css?family=Press+Start+2P");
+    html, body { width: 100%; height: 100%; margin: 0; }
+    * { font-family: 'Press Start 2P', cursive; box-sizing: border-box; }
+    #app {
+      padding: 1rem;
+      background: black;
+      display: flex;
+      height: 100%;
+      justify-content: center;
+      align-items: center;
+      color: #54FE55;
+      text-shadow: 0px 0px 10px;
+      font-size: 6rem;
+      flex-direction: column;
+    }
+    #app .txt { font-size: 1.8rem; }
+    @keyframes blink {
+      0%, 49% { opacity: 0; }
+      50%, 100% { opacity: 1; }
+    }
+    .blink {
+      animation-name: blink;
+      animation-duration: 1s;
+      animation-iteration-count: infinite;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div>403</div>
+    <div class="txt"> Forbidden<span class="blink">_</span> </div>
+  </div>
+</body>
+</html> '''
 
 # ========== App Data ==========
 
